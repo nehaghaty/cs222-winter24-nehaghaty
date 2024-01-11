@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.9)
 project(PeterDB)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_COMPILER "g++")
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)

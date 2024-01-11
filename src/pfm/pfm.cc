@@ -1,3 +1,6 @@
+#include <fstream>
+#include <filesystem>
+#include <iostream>
 #include "src/include/pfm.h"
 
 namespace PeterDB {
@@ -15,6 +18,20 @@ namespace PeterDB {
     PagedFileManager &PagedFileManager::operator=(const PagedFileManager &) = default;
 
     RC PagedFileManager::createFile(const std::string &fileName) {
+        if (std::filesystem::exists(fileName.c_str())){
+            std::cout << "file already exists" << std::endl;
+            return -1;
+        }
+        else{
+            //create file
+            std::fstream file(fileName.c_str(), std::ios::out | std::ios::in |
+            std::ios::trunc|std::ios::binary);
+            if(file){
+                std::cout << "file created successfully" << std::endl;
+                return 0;
+            }
+        }
+        std::cout << "file creation failed" << std::endl;
         return -1;
     }
 
