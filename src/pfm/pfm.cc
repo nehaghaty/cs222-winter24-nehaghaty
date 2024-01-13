@@ -33,7 +33,7 @@ namespace PeterDB {
         else{
             //create file
             std::fstream file(fileName.c_str(), std::ios::out | std::ios::in |
-            std::ios::trunc|std::ios::binary);
+            std::ios::trunc);
             if(file){
                 std::cout << "File created successfully" << std::endl;
                 return 0;
@@ -50,16 +50,30 @@ namespace PeterDB {
     RC PagedFileManager::openFile(const std::string &fileName, FileHandle &fileHandle) {
         // check if file exists
         if(fileExists(fileName)){
-            std::fstream file;
-            file.open(fileName.c_str(), std::ios::out|std::ios::in|std::ios::app);
+            FILE *file;
+            file = fopen(fileName.c_str(), "wb");
             if (!file) {
-                std::cout << "File not opened"<< std::endl;
+                std::cout << "File not opened" << std::endl;
                 return -1;
             }
             else {
                 std::cout << "File opened successfully" << std::endl;
-                fileHandle = FileHandle();
-                return 0;
+                if(fileHandle.opened)
+                {
+                    std::cout<<"File handle in use!" << std::endl;
+                    return -1;
+                }
+                else{
+                    fileHandle.opened=true;
+                    fileHandle.file = file;
+                    //create hidden page
+                    void *hiddenPage = malloc(PAGE_SIZE);
+                    memset(hiddenPage,0,PAGE_SIZE);
+                    fwrite(hiddenPage, PAGE_SIZE, 1, file);
+                    std::cout<<"Hidden file created!" << std::endl;
+                    return 0;
+                }
+
             }
         }
         else{

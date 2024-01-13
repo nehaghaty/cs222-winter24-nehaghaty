@@ -4,6 +4,7 @@
 #define PAGE_SIZE 4096
 
 #include <string>
+#include <fstream>
 
 namespace PeterDB {
 
@@ -35,6 +36,8 @@ namespace PeterDB {
         unsigned readPageCounter;
         unsigned writePageCounter;
         unsigned appendPageCounter;
+        bool opened;
+        FILE *file;
 
         FileHandle();                                                       // Default constructor
         ~FileHandle();                                                      // Destructor
