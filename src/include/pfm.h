@@ -36,6 +36,7 @@ namespace PeterDB {
         unsigned readPageCounter;
         unsigned writePageCounter;
         unsigned appendPageCounter;
+        unsigned totalPages;
         bool opened;
         FILE *file;
 
