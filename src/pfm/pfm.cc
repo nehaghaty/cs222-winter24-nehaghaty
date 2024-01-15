@@ -1,5 +1,6 @@
 #include <fstream>
 #include <filesystem>
+#include <cstring>
 #include <iostream>
 #include <sys/stat.h>
 #include "src/include/pfm.h"
