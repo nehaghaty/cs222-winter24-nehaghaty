@@ -92,6 +92,12 @@ namespace PeterDB {
                     } else {
                         fseek(file, 0, SEEK_SET);
                         fread(&fileHandle.totalPages, sizeof (int), 1, file);
+                        fseek(file, sizeof(int) + 1, SEEK_SET);
+                        fread(&fileHandle.appendPageCounter, sizeof (int), 1, file);
+                        fseek(file, sizeof(int) * 2 + 1, SEEK_SET);
+                        fread(&fileHandle.writePageCounter, sizeof (int), 1, file);
+                        fseek(file, sizeof(int) * 3 + 1, SEEK_SET);
+                        fread(&fileHandle.readPageCounter, sizeof (int), 1, file);
                         //std::cout << "Total Pages: " <<fileHandle.totalPages << std::endl;
                     }
 //                    std::cout<<"Hidden file created!" << std::endl;
@@ -111,6 +117,12 @@ namespace PeterDB {
             fileHandle.opened = false;
             std::fseek(fileHandle.file, 0, SEEK_SET);
             std::fwrite(&fileHandle.totalPages, sizeof (int), 1, fileHandle.file);
+            std::fseek(fileHandle.file, sizeof(int) + 1, SEEK_SET);
+            std::fwrite(&fileHandle.appendPageCounter, sizeof (int), 1, fileHandle.file);
+            std::fseek(fileHandle.file, sizeof(int) * 2 + 1, SEEK_SET);
+            std::fwrite(&fileHandle.writePageCounter, sizeof (int), 1, fileHandle.file);
+            std::fseek(fileHandle.file, sizeof(int) * 3 + 1, SEEK_SET);
+            std::fwrite(&fileHandle.readPageCounter, sizeof (int), 1, fileHandle.file);
             fclose(fileHandle.file);
             return 0;
         }
@@ -148,7 +160,7 @@ namespace PeterDB {
 
         if (!fseek(file, (pageNum + 1) * PAGE_SIZE, SEEK_SET)) {
             fwrite(data, PAGE_SIZE, 1, file);
-            writePageCounter+=1;
+            writePageCounter++;
             return 0;
         }
         else {
