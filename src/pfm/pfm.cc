@@ -74,38 +74,25 @@ namespace PeterDB {
                 return -1;
             }
             else {
-                //std::cout << "File opened successfully" << std::endl;
-                if(fileHandle.opened)
-                {
-                    std::cout<<"File handle in use!" << std::endl;
-                    return -1;
+                fileHandle.file = file;
+                //check for hidden page, create only if not present already
+                if (getFileSize(file) == 0) {
+                    void *hiddenPage = malloc(PAGE_SIZE);
+                    memset(hiddenPage, 0, PAGE_SIZE);
+                    std::fwrite(hiddenPage, PAGE_SIZE, 1, file);
+                    free(hiddenPage);
+                } else {
+                    fseek(file, 0, SEEK_SET);
+                    fread(&fileHandle.totalPages, sizeof (int), 1, file);
+                    fseek(file, sizeof(int) + 1, SEEK_SET);
+                    fread(&fileHandle.appendPageCounter, sizeof (int), 1, file);
+                    fseek(file, sizeof(int) * 2 + 1, SEEK_SET);
+                    fread(&fileHandle.writePageCounter, sizeof (int), 1, file);
+                    fseek(file, sizeof(int) * 3 + 1, SEEK_SET);
+                    fread(&fileHandle.readPageCounter, sizeof (int), 1, file);
                 }
-                else {
-
-                    fileHandle.opened=true;
-                    fileHandle.file = file;
-                    //check for hidden page, create only if not present already
-                    if (getFileSize(file) == 0) {
-                        void *hiddenPage = malloc(PAGE_SIZE);
-                        memset(hiddenPage, 0, PAGE_SIZE);
-                        std::fwrite(hiddenPage, PAGE_SIZE, 1, file);
-                        free(hiddenPage);
-                    } else {
-                        fseek(file, 0, SEEK_SET);
-                        fread(&fileHandle.totalPages, sizeof (int), 1, file);
-                        fseek(file, sizeof(int) + 1, SEEK_SET);
-                        fread(&fileHandle.appendPageCounter, sizeof (int), 1, file);
-                        fseek(file, sizeof(int) * 2 + 1, SEEK_SET);
-                        fread(&fileHandle.writePageCounter, sizeof (int), 1, file);
-                        fseek(file, sizeof(int) * 3 + 1, SEEK_SET);
-                        fread(&fileHandle.readPageCounter, sizeof (int), 1, file);
-                        //std::cout << "Total Pages: " <<fileHandle.totalPages << std::endl;
-                    }
-//                    std::cout<<"Hidden file created!" << std::endl;
-                    return 0;
+                return 0;
                 }
-
-            }
         }
         else {
             std::cout << "File does not exist" << std::endl;
@@ -114,22 +101,16 @@ namespace PeterDB {
     }
 
     RC PagedFileManager::closeFile(FileHandle &fileHandle) {
-        if (fileHandle.opened) {
-            fileHandle.opened = false;
-            std::fseek(fileHandle.file, 0, SEEK_SET);
-            std::fwrite(&fileHandle.totalPages, sizeof (int), 1, fileHandle.file);
-            std::fseek(fileHandle.file, sizeof(int) + 1, SEEK_SET);
-            std::fwrite(&fileHandle.appendPageCounter, sizeof (int), 1, fileHandle.file);
-            std::fseek(fileHandle.file, sizeof(int) * 2 + 1, SEEK_SET);
-            std::fwrite(&fileHandle.writePageCounter, sizeof (int), 1, fileHandle.file);
-            std::fseek(fileHandle.file, sizeof(int) * 3 + 1, SEEK_SET);
-            std::fwrite(&fileHandle.readPageCounter, sizeof (int), 1, fileHandle.file);
-            fclose(fileHandle.file);
-            return 0;
-        }
-        else {
-            return -1;
-        }
+        std::fseek(fileHandle.file, 0, SEEK_SET);
+        std::fwrite(&fileHandle.totalPages, sizeof (int), 1, fileHandle.file);
+        std::fseek(fileHandle.file, sizeof(int) + 1, SEEK_SET);
+        std::fwrite(&fileHandle.appendPageCounter, sizeof (int), 1, fileHandle.file);
+        std::fseek(fileHandle.file, sizeof(int) * 2 + 1, SEEK_SET);
+        std::fwrite(&fileHandle.writePageCounter, sizeof (int), 1, fileHandle.file);
+        std::fseek(fileHandle.file, sizeof(int) * 3 + 1, SEEK_SET);
+        std::fwrite(&fileHandle.readPageCounter, sizeof (int), 1, fileHandle.file);
+        fclose(fileHandle.file);
+        return 0;
     }
 
     FileHandle::FileHandle() {
