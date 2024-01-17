@@ -1,5 +1,5 @@
 #include "src/include/cli.h"
-
+#include <climits>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <fstream>
