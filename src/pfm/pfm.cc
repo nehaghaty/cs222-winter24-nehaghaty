@@ -1,5 +1,3 @@
-#include <fstream>
-#include <filesystem>
 #include <cstring>
 #include <iostream>
 #include <sys/stat.h>
@@ -29,9 +27,7 @@ namespace PeterDB {
     static long getFileSize(FILE *file) {
         long size;
         fseek(file, 0, SEEK_END);
-
         size = ftell(file);
-
         return size;
     }
 
