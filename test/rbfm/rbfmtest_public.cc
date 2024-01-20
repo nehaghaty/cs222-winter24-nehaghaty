@@ -993,4 +993,50 @@ namespace PeterDBTesting {
         }
     }
 
+    TEST_F(RBFM_Test, testing) {
+        // Functions tested
+        // 1. Create Record-Based File
+        // 2. Open Record-Based File
+        // 3. Insert Record
+        // 4. Read Record
+        // 5. Close Record-Based File
+        // 6. Destroy Record-Based File
+
+        PeterDB::RID rid;
+        size_t recordSize = 0;
+        inBuffer = malloc(100);
+        outBuffer = malloc(100);
+
+        std::vector<PeterDB::Attribute> recordDescriptor;
+        createRecordDescriptor(recordDescriptor);
+
+        // Initialize a NULL field indicator
+        nullsIndicator = initializeNullFieldsIndicator(recordDescriptor);
+
+        // Insert a inBuffer into a file and print the inBuffer
+        prepareRecord((int) (int) recordDescriptor.size(), nullsIndicator, 8, "Anteater", 25, 177.8, 6200, inBuffer, recordSize);
+
+        std::ostringstream stream;
+        rbfm.printRecord(recordDescriptor, inBuffer, stream);
+        /*ASSERT_NO_FATAL_FAILURE(
+                checkPrintRecord("EmpName: Anteater, Age: 25, Height: 177.8, Salary: 6200", stream.str()));*/
+
+        ASSERT_EQ(rbfm.insertRecord(fileHandle, recordDescriptor, inBuffer, rid), success)
+                                    << "Inserting a inBuffer should succeed.";
+
+        // Given the rid, read the inBuffer from file
+        /*ASSERT_EQ(rbfm.readRecord(fileHandle, recordDescriptor, rid, outBuffer), success)
+                                    << "Reading a inBuffer should succeed.";
+
+        stream.str(std::string());
+        stream.clear();
+        rbfm.printRecord(recordDescriptor, outBuffer, stream);
+        ASSERT_NO_FATAL_FAILURE(
+                checkPrintRecord("EmpName: Anteater, Age: 25, Height: 177.8, Salary: 6200", stream.str()));
+
+        // Compare whether the two memory blocks are the same
+        ASSERT_EQ(memcmp(inBuffer, outBuffer, recordSize), 0) << "the read data should match the inserted data";*/
+
+    }
+
 }// namespace PeterDBTesting
