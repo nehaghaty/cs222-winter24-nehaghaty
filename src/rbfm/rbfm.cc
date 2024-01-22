@@ -1,5 +1,6 @@
 #include "src/include/rbfm.h"
 #include <iostream>
+#include <sstream>
 
 namespace PeterDB {
     RecordBasedFileManager &RecordBasedFileManager::instance() {
@@ -249,7 +250,76 @@ namespace PeterDB {
 
     RC RecordBasedFileManager::printRecord(const std::vector<Attribute> &recordDescriptor, const void *data,
                                            std::ostream &out) {
+        std::vector<std::string> record_details;
+        char *data_pointer      =  (char*)data;
+        int number_of_fields = recordDescriptor.size();
 
+        int bit_vector_size     = (int)ceil((double)number_of_fields / 8);
+        std::vector<bool> null_or_not;
+
+        //find out which fields are NULL
+        for (int i = 0; i < bit_vector_size; i++) {
+            for (int bit = 7; bit >= 0; --bit) {
+                // Check if the bit is set
+                bool isBitSet = (data_pointer[i] & (1 << bit)) != 0;
+
+                null_or_not.push_back(isBitSet);
+            }
+        }
+        data_pointer += bit_vector_size;
+        for (int i = 0; i < number_of_fields; i++) {
+            if (null_or_not[i]) {
+                record_details.push_back("NULL");
+                continue;
+            }
+
+            //int data
+            if (recordDescriptor[i].type == 0) {
+
+                int int_data;
+                memcpy(&int_data, data_pointer, sizeof (int));
+
+                data_pointer += 4;
+
+                record_details.push_back(std::to_string(int_data));
+            }
+
+                //float data
+            else if (recordDescriptor[i].type == 1) {
+
+                float real_data;
+                std::ostringstream ss;
+                memcpy(&real_data, data_pointer, sizeof (float));
+                ss << real_data;
+
+                data_pointer += 4;
+                std::cout << "insert  " << real_data << std::endl;
+                record_details.push_back(ss.str());
+            }
+                //varchar data
+            else if (recordDescriptor[i].type == 2) {
+                int size_of_data;
+
+                memcpy(&size_of_data, data_pointer, sizeof (int));
+
+                size_of_data = std::min(size_of_data, (int)recordDescriptor[i].length);
+                char *buffer = (char*) malloc(size_of_data);
+                data_pointer += 4;
+
+                memcpy(buffer, data_pointer, size_of_data);
+
+                data_pointer += size_of_data;
+
+                record_details.push_back(buffer);
+            }
+        }
+        std::string output_str = "";
+        for (int i = 0; i < record_details.size()-1; i ++ ) {
+            output_str += recordDescriptor[i].name + ": " + record_details[i] + ", ";
+        }
+
+        output_str += recordDescriptor.back().name + ": " + record_details.back();
+        std::cout << output_str;
         return 0;
     }
 
