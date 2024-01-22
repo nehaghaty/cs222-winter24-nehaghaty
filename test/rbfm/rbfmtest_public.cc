@@ -1023,6 +1023,18 @@ namespace PeterDBTesting {
 
         ASSERT_EQ(rbfm.insertRecord(fileHandle, recordDescriptor, inBuffer, rid), success)
                                     << "Inserting a inBuffer should succeed.";
+        ASSERT_EQ(rid.pageNum,1);
+        ASSERT_EQ(rid.slotNum,0);
+
+        ASSERT_EQ(rbfm.insertRecord(fileHandle, recordDescriptor, inBuffer, rid), success)
+                                    << "Inserting a inBuffer should succeed.";
+
+        ASSERT_EQ(rid.pageNum,1);
+        ASSERT_EQ(rid.slotNum,1);
+
+        ASSERT_EQ(fileHandle.getNumberOfPages(),1);
+
+
 
         // Given the rid, read the inBuffer from file
         /*ASSERT_EQ(rbfm.readRecord(fileHandle, recordDescriptor, rid, outBuffer), success)

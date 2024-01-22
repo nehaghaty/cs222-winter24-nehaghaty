@@ -31,19 +31,52 @@ namespace PeterDB {
         return PagedFileManager::instance().closeFile(fileHandle);
     }
 
+    void createNewPageDir(FileHandle &fileHandle, char *page){
+        char *inBuffer = (char*)malloc(PAGE_SIZE);
+        char* buf_ptr = inBuffer+PAGE_SIZE-1-4;
+        int free = PAGE_SIZE-8;
+        memcpy(buf_ptr,&free, sizeof(int));
+        buf_ptr-=4;
+        int num_records = 0;
+        memcpy(buf_ptr,&num_records, sizeof(int));
+        fileHandle.appendPage(inBuffer);
+        memcpy(page,inBuffer,PAGE_SIZE);
+    }
+
+    void getPage(char *page, FileHandle &fileHandle, int record_size) {
+        if(fileHandle.getNumberOfPages() == 0){
+            createNewPageDir(fileHandle, page);
+        }
+        else{
+            // read page
+            char* data = (char*)malloc(PAGE_SIZE);
+            fileHandle.readPage(fileHandle.getNumberOfPages(), data);
+            char* free_bytes_ptr = data+PAGE_SIZE-1-4;
+            int free = *(int*)free_bytes_ptr;
+            if(record_size>free){
+                createNewPageDir(fileHandle, page);
+            }
+            else{
+                fileHandle.readPage(fileHandle.getNumberOfPages(), page);
+            }
+        }
+    }
+
+    void copyRecordToPageBuf(char* record, int record_length, int seekLen, char* page_ptr){
+        printf("record length: %d\n", record_length);
+        printf("seek len: %d\n", seekLen);
+        memcpy(page_ptr+seekLen,record, record_length);
+    }
     RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
                                             const void *data, RID &rid) {
         int number_of_fields = recordDescriptor.size();
-
         char *data_pointer      =  (char*)data;
         char *record_pointer;
         char *offset_pointer;
         char *record;
-
         int total_size          =  0;
-
         int bit_vector_size     = (int)ceil((double)number_of_fields / 8);
-        std::vector<bool> null_or_not;
+        std::vector<bool> isNull;
 
         //find out which fields are NULL
         for (int i = 0; i < bit_vector_size; i++) {
@@ -51,12 +84,11 @@ namespace PeterDB {
                 // Check if the bit is set
                 bool isBitSet = (((char*)data)[i] & (1 << bit)) != 0;
 
-                null_or_not.push_back(isBitSet);
+                isNull.push_back(isBitSet);
             }
         }
 
         //find out the total size of the memory that the record is going to take
-
         total_size += 4; //number of fields
         total_size += bit_vector_size; //bit vector
 
@@ -82,7 +114,7 @@ namespace PeterDB {
 
         // creating record from the original data format
         for (int i = 0; i < number_of_fields; i++) {
-            if (null_or_not[i]) {
+            if (isNull[i]) {
                 int offset = record_pointer - record;
                 std::memcpy((int*)offset_pointer, &offset, sizeof (int));
                 offset_pointer += 4;
@@ -150,9 +182,57 @@ namespace PeterDB {
         printf("%d\n", *(int*)(record + 29));
         printf("%f\n", *(float*)(record + 33));
         printf("%d\n", *(int*)(record + 37));
+        printf("total size of records: %d\n", total_size);
 //        for (auto i : record_details) {
 //            std:: cout << i << std::endl;
 //        }
+        // write to page:
+        // check if record size is greater than PAGE_SIZE: return -1 for now
+        if(total_size > PAGE_SIZE){
+            return -1;
+        }
+
+        // in memory page buffer
+        char* page = (char*)malloc(PAGE_SIZE);
+        getPage(page, fileHandle, total_size);
+        printf("free bytes in new page: %d\n", *(int*)(page+PAGE_SIZE-1-4));
+        printf("num records in new page: %d\n", *(int*)(page+PAGE_SIZE-1-8));
+        // get num records 'n' from page
+        char* page_ptr = page;
+        char* slot_ptr = page_ptr+PAGE_SIZE-1-8;
+        int num_records = *(int*)(page_ptr+PAGE_SIZE-1-8);
+        int seekLen=0;
+        if(num_records == 0){
+            copyRecordToPageBuf(record, total_size,seekLen,page_ptr);
+        }
+        else{
+
+            int skipBytes = num_records*4;
+            char* slot = slot_ptr-skipBytes;
+            short offset = *(short*) slot;
+            slot+=2;
+            short length = *(short*) slot;
+            seekLen = offset+length;
+            copyRecordToPageBuf(record, total_size,seekLen, page_ptr);
+        }
+        num_records++;
+        page_ptr = page_ptr+PAGE_SIZE-1-8;
+        memcpy(page_ptr, &num_records, sizeof(int));
+        page_ptr = page_ptr+4;
+        int newFree = PAGE_SIZE - 8 - total_size;
+        memcpy(page_ptr,&newFree, sizeof(int));
+        slot_ptr = slot_ptr-num_records*4;
+//        int newOffset = seekLen+total_size;
+        memcpy(slot_ptr,&seekLen, sizeof(short));
+        slot_ptr+=2;
+        memcpy(slot_ptr,&total_size, sizeof(short));
+
+        fileHandle.writePage(fileHandle.getNumberOfPages(), page);
+
+        //RID
+        rid.pageNum = fileHandle.getNumberOfPages();
+        rid.slotNum = num_records-1;
+
 
         return 0;
     }
