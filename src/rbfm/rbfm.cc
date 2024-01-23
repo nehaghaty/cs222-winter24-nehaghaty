@@ -173,7 +173,7 @@ namespace PeterDB {
             }
         }
 
-        printf("%d\n", *(int*)(record));
+        /*printf("%d\n", *(int*)(record));
         printf("%d\n", *(int*)(record + 5));
         printf("%d\n", *(int*)(record + 9));
         printf("%d\n", *(int*)(record + 13));
@@ -184,9 +184,9 @@ namespace PeterDB {
         printf("%f\n", *(float*)(record + 33));
         printf("%d\n", *(int*)(record + 37));
         printf("total size of records: %d\n", total_size);
-//        for (auto i : record_details) {
-//            std:: cout << i << std::endl;
-//        }
+        for (auto i : record_details) {
+            std:: cout << i << std::endl;
+        }*/
         // write to page:
         // check if record size is greater than PAGE_SIZE: return -1 for now
         if(total_size > PAGE_SIZE){
@@ -240,7 +240,102 @@ namespace PeterDB {
 
     RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
                                           const RID &rid, void *data) {
-        return -1;
+        int page_num = rid.pageNum;
+        int slot_num = rid.slotNum;
+
+        void *page_data = malloc(PAGE_SIZE);
+
+        if (fileHandle.readPage(page_num, page_data))
+            std::cout << "Error reading page" << std::endl;
+
+        char *data_pointer = (char*)page_data;
+//        printf("%d\n", *(int*)(data_pointer + PAGE_SIZE - 9));
+
+        short offset = *(short*)(data_pointer + PAGE_SIZE - 1 - 8 - 4 * (slot_num + 1));
+        short length = *(short*)(data_pointer + PAGE_SIZE - 1 - 8 - 4 * (slot_num + 1) + 2);
+
+        char *record = (char*) malloc(length);
+        memcpy(record, data_pointer + offset, length);
+        char *record_pointer = record;
+
+        //deserialize
+        int number_of_fields    =  recordDescriptor.size();
+        int bit_vector_size     =  (int)ceil((double)number_of_fields / 8);
+        std::vector<bool> isNull;
+
+        record_pointer += 4;
+
+        //find out which fields are NULL
+        for (int i = 0; i < bit_vector_size; i++) {
+            for (int bit = 7; bit >= 0; --bit) {
+                // Check if the bit is set
+                bool isBitSet = (((char*)record_pointer)[i] & (1 << bit)) != 0;
+
+                isNull.push_back(isBitSet);
+            }
+        }
+
+        int total_size =  0;
+
+        total_size += bit_vector_size;
+        for (int i = 0; i < number_of_fields; i++) {
+            total_size += recordDescriptor[i].length;
+            if (recordDescriptor[i].type == 2)
+                total_size += 4;
+        }
+        char *data_to_be_returned = (char*) malloc(total_size);
+        memset(data_to_be_returned, 0, total_size);
+
+        char *new_data_pointer = data_to_be_returned;
+        memcpy(new_data_pointer, record_pointer, bit_vector_size);
+
+        record_pointer += bit_vector_size;
+        new_data_pointer += bit_vector_size;
+
+        char *offset_pointer = record_pointer;
+        record_pointer += number_of_fields * sizeof (int);
+
+        for (int i = 0; i < number_of_fields; i++) {
+            if (isNull[i]) {
+                offset_pointer += 4;
+                continue;
+            }
+            if (recordDescriptor[i].type == 0) {
+                int int_data;
+                memcpy(&int_data, record_pointer, sizeof (int));
+
+                record_pointer += 4;
+
+                memcpy((int*)new_data_pointer, &int_data, sizeof (int));
+                new_data_pointer += 4;
+
+                offset_pointer +=4 ;
+            }
+            else if (recordDescriptor[i].type == 1) {
+                int float_data;
+                memcpy(&float_data, record_pointer, sizeof (float));
+
+                record_pointer += 4;
+
+                memcpy((int*)new_data_pointer, &float_data, sizeof (float));
+                new_data_pointer += 4;
+
+                offset_pointer +=4 ;
+            }
+            else if (recordDescriptor[i].type == 2) {
+                int length_of_string = record + *(int*)offset_pointer - record_pointer;
+                memcpy((int*)new_data_pointer, &length_of_string, sizeof (int));
+                new_data_pointer += 4;
+
+                memcpy(new_data_pointer, record_pointer, length_of_string);
+
+                new_data_pointer += length_of_string;
+                record_pointer += length_of_string;
+                offset_pointer += 4;
+            }
+        }
+        memcpy(data, data_to_be_returned, record_pointer - record);
+        return 0;
     }
 
     RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
@@ -293,7 +388,7 @@ namespace PeterDB {
                 ss << real_data;
 
                 data_pointer += 4;
-                std::cout << "insert  " << real_data << std::endl;
+//                std::cout << "insert  " << real_data << std::endl;
                 record_details.push_back(ss.str());
             }
                 //varchar data
@@ -319,7 +414,7 @@ namespace PeterDB {
         }
 
         output_str += recordDescriptor.back().name + ": " + record_details.back();
-        std::cout << output_str;
+        out << output_str;
         return 0;
     }
 
