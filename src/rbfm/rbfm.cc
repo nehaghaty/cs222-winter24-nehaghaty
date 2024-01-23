@@ -1,5 +1,6 @@
 #include "src/include/rbfm.h"
 #include <iostream>
+#include <cstring>
 #include <sstream>
 
 namespace PeterDB {
