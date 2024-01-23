@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cstring>
 #include <sstream>
+#include <cmath>
 
 #define FIELD_BYTES        4
 #define OFFSET_BYTES        4
