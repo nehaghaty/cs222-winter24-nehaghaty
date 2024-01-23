@@ -5,7 +5,8 @@
 #include <cmath>
 
 #define FIELD_BYTES        4
-#define OFFSET_BYTES        4
+#define OFFSET_BYTES       4
+#define CHAR_BIT           8
 
 namespace PeterDB {
     RecordBasedFileManager &RecordBasedFileManager::instance() {
@@ -150,7 +151,6 @@ namespace PeterDB {
     }
 
     int getPage(char *page, FileHandle &fileHandle, int record_size) {
-        int pageNum;
         if(fileHandle.getNumberOfPages() == 0){
             createNewPageDir(fileHandle, page);
             return fileHandle.getNumberOfPages()-1;
@@ -215,11 +215,11 @@ namespace PeterDB {
 
         // calculate formatted record size
         int recordSize =  calculateFormattedRecordSize(nullAttributesIndicatorSize,recordDescriptor);
-        //printf("total size of records before build: %d\n", recordSize);
+//        printf("total size of records before build: %d\n", recordSize);
         buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
 
-        printf("size of record: %d\n", recordSize);
+//        printf("total size of records: %d\n", recordSize);
 
         // write to page:
         // check if record size is greater than PAGE_SIZE: return -1 for now
@@ -267,13 +267,10 @@ namespace PeterDB {
         memcpy(slot_ptr, &recordSize, sizeof(short));
 
         fileHandle.writePage(pageNum, page);
-        printf("free bytes in page: %d is : %d\n", pageNum, newFree);
 
         //RID
         rid.pageNum = (unsigned)pageNum;
         rid.slotNum = (unsigned short)num_records-1;
-
-        printf("%u %hu\n", rid.pageNum, rid.slotNum);
 
         return 0;
     }
