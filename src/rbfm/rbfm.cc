@@ -132,9 +132,9 @@ namespace PeterDB {
         }
     }
 
-    void createNewPageDir(FileHandle &fileHandle, char *page){
+    void createNewPageDir(FileHandle &fileHandle, char*& page){
         char *inBuffer = (char*)malloc(PAGE_SIZE);
-        memset(inBuffer,0,PAGE_SIZE);
+//        memset(inBuffer,0,PAGE_SIZE);
         char* buf_ptr = inBuffer+PAGE_SIZE-1-4;
         int freeBytes = PAGE_SIZE - 8;
         memcpy(buf_ptr, &freeBytes, sizeof(int));
@@ -155,8 +155,9 @@ namespace PeterDB {
             char* data = (char*)malloc(PAGE_SIZE);
             fileHandle.readPage(fileHandle.getNumberOfPages(), data);
             char* free_bytes_ptr = data+PAGE_SIZE-1-4;
-            int free = *(int*)free_bytes_ptr;
-            if(record_size>free){
+            int freeBytes = *(int*)(data + PAGE_SIZE - 1 - 4);
+            int numRecs = *(int*)(data + PAGE_SIZE - 1 - 8);
+            if(record_size+4 > freeBytes){
                 createNewPageDir(fileHandle, page);
             }
             else{
@@ -192,16 +193,16 @@ namespace PeterDB {
 
         buildRecord(recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
-        printf("%d\n", *(int*)(record));
-        printf("%d\n", *(int*)(record + 5));
-        printf("%d\n", *(int*)(record + 9));
-        printf("%d\n", *(int*)(record + 13));
-        printf("%d\n", *(int*)(record + 17));
+//        printf("%d\n", *(int*)(record));
+//        printf("%d\n", *(int*)(record + 5));
+//        printf("%d\n", *(int*)(record + 9));
+//        printf("%d\n", *(int*)(record + 13));
+//        printf("%d\n", *(int*)(record + 17));
 
-        printf("%c %c\n", *(int*)(record + 21), *(int*)(record + 28));
-        printf("%d\n", *(int*)(record + 29));
-        printf("%f\n", *(float*)(record + 33));
-        printf("%d\n", *(int*)(record + 37));
+//        printf("%c %c\n", *(int*)(record + 21), *(int*)(record + 28));
+//        printf("%d\n", *(int*)(record + 29));
+//        printf("%f\n", *(float*)(record + 33));
+//        printf("%d\n", *(int*)(record + 37));
         printf("total size of records: %d\n", recordSize);
 
         // write to page:
@@ -213,12 +214,14 @@ namespace PeterDB {
         // in memory page buffer
         char* page = (char*)malloc(PAGE_SIZE);
         getPage(page, fileHandle, recordSize);
-        printf("free bytes in new page: %d\n", *(int*)(page+PAGE_SIZE-1-4));
+
         printf("num records in new page: %d\n", *(int*)(page+PAGE_SIZE-1-8));
         // get num records 'n' from page
         char* page_ptr = page;
         char* slot_ptr = page_ptr+PAGE_SIZE-1-8;
         int num_records = *(int*)(page_ptr+PAGE_SIZE-1-8);
+        int curr_free = *(int*)(page+PAGE_SIZE-1-4);
+        printf("free bytes: %d\n", curr_free);
         int seekLen=0;
         if(num_records == 0){
             copyRecordToPageBuf(record, recordSize, seekLen, page_ptr);
@@ -233,15 +236,18 @@ namespace PeterDB {
             seekLen = offset+length;
             copyRecordToPageBuf(record, recordSize, seekLen, page_ptr);
         }
+        // update number of records
         num_records++;
         page_ptr = page_ptr+PAGE_SIZE-1-8;
         memcpy(page_ptr, &num_records, sizeof(int));
         page_ptr = page_ptr+4;
-        int newFree = PAGE_SIZE - 8 - recordSize;
+        int newFree = curr_free - recordSize - 4; // reduce free size by slot (4 bytes) and record size
         memcpy(page_ptr,&newFree, sizeof(int));
         slot_ptr = slot_ptr-num_records*4;
+        // add offset of new record
         memcpy(slot_ptr,&seekLen, sizeof(short));
         slot_ptr+=2;
+        // add length of new record
         memcpy(slot_ptr, &recordSize, sizeof(short));
 
         fileHandle.writePage(fileHandle.getNumberOfPages(), page);
