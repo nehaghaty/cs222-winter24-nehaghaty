@@ -3,6 +3,9 @@
 #include <cstring>
 #include <sstream>
 
+#define FIELD_BYTES        4
+#define OFFSET_BYTES        4
+
 namespace PeterDB {
     RecordBasedFileManager &RecordBasedFileManager::instance() {
         static RecordBasedFileManager _rbf_manager = RecordBasedFileManager();
@@ -33,16 +36,114 @@ namespace PeterDB {
         return PagedFileManager::instance().closeFile(fileHandle);
     }
 
+    static int getActualByteForNullsIndicator(int fieldCount) {
+
+        return ceil((double) fieldCount / CHAR_BIT);
+    }
+
+    static int calculateFormattedRecordSize(int nullAttributesIndicatorSize,
+                                            const std::vector<Attribute> &recordDescriptor){
+        int recordSize = 0;
+        recordSize += FIELD_BYTES; //number of fields
+        recordSize += nullAttributesIndicatorSize; //null bit vector
+
+        for (int i = 0; i < recordDescriptor.size(); i++) {
+            recordSize += OFFSET_BYTES; //offsets
+            recordSize += recordDescriptor[i].length;
+        }
+        return recordSize;
+    }
+    static void buildRecord(int recordSize, char*& record, const std::vector<Attribute> &recordDescriptor,
+                            const void *data, int nullAttributesIndicatorSize,
+                            std::vector<bool> isNull){
+        //start filling the record
+        int fieldCount = recordDescriptor.size();
+        record = (char*)malloc(recordSize);
+        memset (record, 0, recordSize);
+
+        char *dataPointer = (char*)data;
+        char* recordPointer = record;
+        *((int *)recordPointer) = fieldCount;
+        recordPointer += 4;
+        memcpy(recordPointer, data, nullAttributesIndicatorSize);
+        recordPointer += nullAttributesIndicatorSize;
+        dataPointer += nullAttributesIndicatorSize;
+
+        char* offsetPointer = recordPointer;
+        recordPointer += (sizeof(int) * fieldCount);
+
+        // creating record from the original data format
+        for (int i = 0; i < fieldCount; i++) {
+            if (isNull[i]) {
+                int offset = recordPointer - record;
+                std::memcpy((int*)offsetPointer, &offset, sizeof (int));
+                offsetPointer += 4;
+                continue;
+            }
+
+            //integer data
+            if (recordDescriptor[i].type == PeterDB::TypeInt) {
+
+                int int_data;
+                memcpy(&int_data, dataPointer, sizeof (int));
+
+                dataPointer += 4;
+
+                memcpy((int*)recordPointer, &int_data, sizeof (int));
+                recordPointer += 4;
+
+                int offset = recordPointer - record;
+                memcpy((int*)offsetPointer, &offset, sizeof (int));
+                offsetPointer +=4 ;
+            }
+                //float data
+            else if (recordDescriptor[i].type == PeterDB::TypeReal) {
+
+                float real_data;
+                memcpy(&real_data, dataPointer, sizeof (float));
+
+                dataPointer += 4;
+
+                memcpy((float*)recordPointer, &real_data, sizeof (float));
+                recordPointer += 4;
+
+                int offset = recordPointer - record;
+                memcpy((int*)offsetPointer, &offset, sizeof (int));
+                offsetPointer +=4 ;
+            }
+                //varchar data
+            else if (recordDescriptor[i].type == PeterDB::TypeVarChar) {
+                int dataSize;
+
+                memcpy(&dataSize, dataPointer, sizeof (int));
+
+                dataSize = std::min(dataSize, (int)recordDescriptor[i].length);
+
+                dataPointer += 4;
+
+                memcpy(recordPointer, dataPointer, dataSize);
+                recordPointer += dataSize;
+                dataPointer += dataSize;
+
+                int offset = recordPointer - record;
+                memcpy((int*)offsetPointer, &offset, sizeof (int));
+                offsetPointer +=4 ;
+            }
+        }
+    }
+
     void createNewPageDir(FileHandle &fileHandle, char *page){
         char *inBuffer = (char*)malloc(PAGE_SIZE);
+        memset(inBuffer,0,PAGE_SIZE);
         char* buf_ptr = inBuffer+PAGE_SIZE-1-4;
-        int free = PAGE_SIZE-8;
-        memcpy(buf_ptr,&free, sizeof(int));
+        int freeBytes = PAGE_SIZE - 8;
+        memcpy(buf_ptr, &freeBytes, sizeof(int));
         buf_ptr-=4;
         int num_records = 0;
         memcpy(buf_ptr,&num_records, sizeof(int));
         fileHandle.appendPage(inBuffer);
         memcpy(page,inBuffer,PAGE_SIZE);
+        free(inBuffer);
     }
 
     void getPage(char *page, FileHandle &fileHandle, int record_size) {
@@ -69,112 +170,29 @@ namespace PeterDB {
         printf("seek len: %d\n", seekLen);
         memcpy(page_ptr+seekLen,record, record_length);
     }
+
     RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
                                             const void *data, RID &rid) {
-        int number_of_fields = recordDescriptor.size();
-        char *data_pointer      =  (char*)data;
-        char *record_pointer;
-        char *offset_pointer;
-        char *record;
-        int total_size          =  0;
-        int bit_vector_size     = (int)ceil((double)number_of_fields / 8);
+        int fieldCount = recordDescriptor.size();
+        char *record = nullptr;
+
+        int nullAttributesIndicatorSize = getActualByteForNullsIndicator(fieldCount);
         std::vector<bool> isNull;
 
         //find out which fields are NULL
-        for (int i = 0; i < bit_vector_size; i++) {
-            for (int bit = 7; bit >= 0; --bit) {
+        for (int i = 0; i < nullAttributesIndicatorSize; i++) {
+            for (int bit = CHAR_BIT-1; bit >= 0; --bit) {
                 // Check if the bit is set
-                bool isBitSet = (((char*)data)[i] & (1 << bit)) != 0;
-
-                isNull.push_back(isBitSet);
+                isNull.push_back((((char*)data)[i] & (1 << bit)) != 0);
             }
         }
 
-        //find out the total size of the memory that the record is going to take
-        total_size += 4; //number of fields
-        total_size += bit_vector_size; //bit vector
+        // calculate formatted record size
+        int recordSize =  calculateFormattedRecordSize(nullAttributesIndicatorSize,recordDescriptor);
 
-        for (int i = 0; i < number_of_fields; i++) {
-            total_size += 4; //offset
-            total_size += recordDescriptor[i].length;
-        }
+        buildRecord(recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
-        //start filling the record
-        record = (char*)malloc(total_size);
-        memset (record, 0, total_size);
-
-        record_pointer = record;
-        *((int *)record_pointer) = number_of_fields;
-        record_pointer += 4;
-
-        memcpy(record_pointer, data, bit_vector_size);
-        record_pointer += bit_vector_size;
-        data_pointer += bit_vector_size;
-
-        offset_pointer = record_pointer;
-        record_pointer += (sizeof(int) * number_of_fields);
-
-        // creating record from the original data format
-        for (int i = 0; i < number_of_fields; i++) {
-            if (isNull[i]) {
-                int offset = record_pointer - record;
-                std::memcpy((int*)offset_pointer, &offset, sizeof (int));
-                offset_pointer += 4;
-                continue;
-            }
-
-            //int data
-            if (recordDescriptor[i].type == 0) {
-
-                int int_data;
-                memcpy(&int_data, data_pointer, sizeof (int));
-
-                data_pointer += 4;
-
-                memcpy((int*)record_pointer, &int_data, sizeof (int));
-                record_pointer += 4;
-
-                int offset = record_pointer - record;
-                memcpy((int*)offset_pointer, &offset, sizeof (int));
-                offset_pointer +=4 ;
-            }
-
-            //float data
-            else if (recordDescriptor[i].type == 1) {
-
-                float real_data;
-                memcpy(&real_data, data_pointer, sizeof (float));
-
-                data_pointer += 4;
-
-                memcpy((float*)record_pointer, &real_data, sizeof (float));
-                record_pointer += 4;
-
-                int offset = record_pointer - record;
-                memcpy((int*)offset_pointer, &offset, sizeof (int));
-                offset_pointer +=4 ;
-            }
-            //varchar data
-            else if (recordDescriptor[i].type == 2) {
-                int size_of_data;
-
-                memcpy(&size_of_data, data_pointer, sizeof (int));
-
-                size_of_data = std::min(size_of_data, (int)recordDescriptor[i].length);
-
-                data_pointer += 4;
-
-                memcpy(record_pointer, data_pointer, size_of_data);
-                record_pointer += size_of_data;
-                data_pointer += size_of_data;
-
-                int offset = record_pointer - record;
-                memcpy((int*)offset_pointer, &offset, sizeof (int));
-                offset_pointer +=4 ;
-            }
-        }
-
-        /*printf("%d\n", *(int*)(record));
+        printf("%d\n", *(int*)(record));
         printf("%d\n", *(int*)(record + 5));
         printf("%d\n", *(int*)(record + 9));
         printf("%d\n", *(int*)(record + 13));
@@ -184,19 +202,17 @@ namespace PeterDB {
         printf("%d\n", *(int*)(record + 29));
         printf("%f\n", *(float*)(record + 33));
         printf("%d\n", *(int*)(record + 37));
-        printf("total size of records: %d\n", total_size);
-        for (auto i : record_details) {
-            std:: cout << i << std::endl;
-        }*/
+        printf("total size of records: %d\n", recordSize);
+
         // write to page:
         // check if record size is greater than PAGE_SIZE: return -1 for now
-        if(total_size > PAGE_SIZE){
+        if(recordSize > PAGE_SIZE){
             return -1;
         }
 
         // in memory page buffer
         char* page = (char*)malloc(PAGE_SIZE);
-        getPage(page, fileHandle, total_size);
+        getPage(page, fileHandle, recordSize);
         printf("free bytes in new page: %d\n", *(int*)(page+PAGE_SIZE-1-4));
         printf("num records in new page: %d\n", *(int*)(page+PAGE_SIZE-1-8));
         // get num records 'n' from page
@@ -205,7 +221,7 @@ namespace PeterDB {
         int num_records = *(int*)(page_ptr+PAGE_SIZE-1-8);
         int seekLen=0;
         if(num_records == 0){
-            copyRecordToPageBuf(record, total_size,seekLen,page_ptr);
+            copyRecordToPageBuf(record, recordSize, seekLen, page_ptr);
         }
         else{
 
@@ -215,26 +231,24 @@ namespace PeterDB {
             slot+=2;
             short length = *(short*) slot;
             seekLen = offset+length;
-            copyRecordToPageBuf(record, total_size,seekLen, page_ptr);
+            copyRecordToPageBuf(record, recordSize, seekLen, page_ptr);
         }
         num_records++;
         page_ptr = page_ptr+PAGE_SIZE-1-8;
         memcpy(page_ptr, &num_records, sizeof(int));
         page_ptr = page_ptr+4;
-        int newFree = PAGE_SIZE - 8 - total_size;
+        int newFree = PAGE_SIZE - 8 - recordSize;
         memcpy(page_ptr,&newFree, sizeof(int));
         slot_ptr = slot_ptr-num_records*4;
-//        int newOffset = seekLen+total_size;
         memcpy(slot_ptr,&seekLen, sizeof(short));
         slot_ptr+=2;
-        memcpy(slot_ptr,&total_size, sizeof(short));
+        memcpy(slot_ptr, &recordSize, sizeof(short));
 
         fileHandle.writePage(fileHandle.getNumberOfPages(), page);
 
         //RID
         rid.pageNum = fileHandle.getNumberOfPages();
         rid.slotNum = num_records-1;
-
 
         return 0;
     }
