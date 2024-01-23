@@ -53,13 +53,13 @@ namespace PeterDB {
         }
         return recordSize;
     }
-    static void buildRecord(int recordSize, char*& record, const std::vector<Attribute> &recordDescriptor,
+    static void buildRecord(int* recordSize, char*& record, const std::vector<Attribute> &recordDescriptor,
                             const void *data, int nullAttributesIndicatorSize,
                             std::vector<bool> isNull){
         //start filling the record
         int fieldCount = recordDescriptor.size();
-        record = (char*)malloc(recordSize);
-        memset (record, 0, recordSize);
+        record = (char*)malloc(*recordSize);
+        memset (record, 0, *recordSize);
 
         char *dataPointer = (char*)data;
         char* recordPointer = record;
@@ -113,11 +113,13 @@ namespace PeterDB {
             }
                 //varchar data
             else if (recordDescriptor[i].type == PeterDB::TypeVarChar) {
+                *recordSize -= recordDescriptor[i].length;
                 int dataSize;
 
                 memcpy(&dataSize, dataPointer, sizeof (int));
 
                 dataSize = std::min(dataSize, (int)recordDescriptor[i].length);
+                *recordSize += dataSize;
 
                 dataPointer += 4;
 
@@ -191,7 +193,7 @@ namespace PeterDB {
         // calculate formatted record size
         int recordSize =  calculateFormattedRecordSize(nullAttributesIndicatorSize,recordDescriptor);
 
-        buildRecord(recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
+        buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
 //        printf("%d\n", *(int*)(record));
 //        printf("%d\n", *(int*)(record + 5));
