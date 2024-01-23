@@ -134,7 +134,7 @@ namespace PeterDB {
         }
     }
 
-    void createNewPageDir(FileHandle &fileHandle, char*& page){
+    void createNewPageDir(FileHandle &fileHandle, char* page){
         char *inBuffer = (char*)malloc(PAGE_SIZE);
 //        memset(inBuffer,0,PAGE_SIZE);
         char* buf_ptr = inBuffer+PAGE_SIZE-1-4;
@@ -156,11 +156,35 @@ namespace PeterDB {
             // read page
             char* data = (char*)malloc(PAGE_SIZE);
             fileHandle.readPage(fileHandle.getNumberOfPages(), data);
-            char* free_bytes_ptr = data+PAGE_SIZE-1-4;
             int freeBytes = *(int*)(data + PAGE_SIZE - 1 - 4);
-            int numRecs = *(int*)(data + PAGE_SIZE - 1 - 8);
+//            int numRecs = *(int*)(data + PAGE_SIZE - 1 - 8);
             if(record_size+4 > freeBytes){
-                createNewPageDir(fileHandle, page);
+//                bool existingPageFound = false;
+//                void* existingPageBuf= malloc(PAGE_SIZE);
+//                for(int i=0;i<fileHandle.getNumberOfPages();i++){
+//                    fileHandle.readPage(i+1,existingPageBuf);
+//                    char* existingPageBufPtr = (char*)existingPageBuf;
+//                    int existingPageFreeSpace = *(int*)(existingPageBufPtr+PAGE_SIZE-1-4);
+//                    if(existingPageFreeSpace > record_size+4){
+//                        existingPageFound = true;
+//                        break;
+//                    }
+//                }
+//                if(existingPageFound){
+//                    page = (char*)existingPageBuf;
+//                }
+//                else{
+                    createNewPageDir(fileHandle, page);
+//                }
+
+                // get free of each page
+                // if free > recordsize+ 4
+                // add record to that page
+                // set pageFound to true
+                // break;
+//                if(!pageFound){
+//                    createNewPageDir(fileHandle, page);
+//                }
             }
             else{
                 fileHandle.readPage(fileHandle.getNumberOfPages(), page);
@@ -195,16 +219,7 @@ namespace PeterDB {
 
         buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
-//        printf("%d\n", *(int*)(record));
-//        printf("%d\n", *(int*)(record + 5));
-//        printf("%d\n", *(int*)(record + 9));
-//        printf("%d\n", *(int*)(record + 13));
-//        printf("%d\n", *(int*)(record + 17));
 
-//        printf("%c %c\n", *(int*)(record + 21), *(int*)(record + 28));
-//        printf("%d\n", *(int*)(record + 29));
-//        printf("%f\n", *(float*)(record + 33));
-//        printf("%d\n", *(int*)(record + 37));
         printf("total size of records: %d\n", recordSize);
 
         // write to page:
