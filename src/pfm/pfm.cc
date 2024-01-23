@@ -120,7 +120,7 @@ namespace PeterDB {
 
     RC FileHandle::readPage(PageNum pageNum, void *data) {
         if (pageNum <= totalPages) {
-            fseek(file, (pageNum + 1) * PAGE_SIZE, SEEK_SET);
+            fseek(file, (pageNum) * PAGE_SIZE, SEEK_SET);
             fread(data, PAGE_SIZE, 1, file);
             readPageCounter++;
             return 0;
@@ -136,7 +136,7 @@ namespace PeterDB {
             return -1;
         }
 
-        if (!fseek(file, (pageNum + 1) * PAGE_SIZE, SEEK_SET)) {
+        if (!fseek(file, pageNum * PAGE_SIZE, SEEK_SET)) {
             fwrite(data, PAGE_SIZE, 1, file);
             writePageCounter++;
             return 0;
@@ -148,7 +148,7 @@ namespace PeterDB {
     }
 
     RC FileHandle::appendPage(const void *data) {
-        fseek(file, (totalPages + 1) * PAGE_SIZE, SEEK_SET);
+        fseek(file, 0, SEEK_END);
         fwrite(data, PAGE_SIZE, 1, file);
         appendPageCounter++;
         totalPages++;

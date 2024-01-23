@@ -265,6 +265,7 @@ namespace PeterDB {
         int slot_num = rid.slotNum;
 
         void *page_data = malloc(PAGE_SIZE);
+        memset(page_data, 0, PAGE_SIZE);
 
         if (fileHandle.readPage(page_num, page_data))
             std::cout << "Error reading page" << std::endl;
