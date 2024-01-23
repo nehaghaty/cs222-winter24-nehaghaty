@@ -1023,6 +1023,7 @@ namespace PeterDBTesting {
 
         ASSERT_EQ(rbfm.insertRecord(fileHandle, recordDescriptor, inBuffer, rid), success)
                                     << "Inserting a inBuffer should succeed.";
+
         ASSERT_EQ(rid.pageNum,1);
         ASSERT_EQ(rid.slotNum,0);
 
@@ -1033,6 +1034,20 @@ namespace PeterDBTesting {
         ASSERT_EQ(rid.slotNum,1);
 
         ASSERT_EQ(fileHandle.getNumberOfPages(),1);
+
+        char* data = (char*)malloc(PAGE_SIZE);
+        fileHandle.readPage(fileHandle.getNumberOfPages(), data);
+        int free=0;
+        memcpy(&free, data+PAGE_SIZE-1-4, sizeof(int));
+        int num_records;
+        memcpy(&num_records, data+PAGE_SIZE-1-8, sizeof(int));
+        int record1_offset=0;
+        memcpy(&record1_offset,data+PAGE_SIZE-1-8-4, sizeof(short));
+        int record2_offset=0;
+        memcpy(&record2_offset,data+PAGE_SIZE-1-8-8, sizeof(short));
+
+        printf("free is:%d\n", free);
+
 
 
 
