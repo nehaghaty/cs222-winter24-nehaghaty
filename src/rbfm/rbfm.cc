@@ -432,16 +432,21 @@ namespace PeterDB {
                 int size_of_data;
 
                 memcpy(&size_of_data, data_pointer, sizeof (int));
-
-                size_of_data = std::min(size_of_data, (int)recordDescriptor[i].length);
-                char *buffer = (char*) malloc(size_of_data);
                 data_pointer += 4;
 
-                memcpy(buffer, data_pointer, size_of_data);
+                if (size_of_data == 0) {
+                    record_details.push_back("");
+                }
+                else {
+                    size_of_data = std::min(size_of_data, (int)recordDescriptor[i].length);
+                    char *buffer = (char*) malloc(size_of_data);
+                    memcpy(buffer, data_pointer, size_of_data);
 
-                data_pointer += size_of_data;
+                    data_pointer += size_of_data;
 
-                record_details.push_back(buffer);
+                    record_details.push_back(buffer);
+                    free(buffer);
+                }
             }
         }
         std::string output_str = "";
