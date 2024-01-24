@@ -218,6 +218,8 @@ namespace PeterDB {
         //printf("total size of records before build: %d\n", recordSize);
         buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
+        printf("record size of file is: %d\n", recordSize);
+
         // write to page:
         // check if record size is greater than PAGE_SIZE: return -1 for now
         if(recordSize > PAGE_SIZE){
@@ -432,16 +434,21 @@ namespace PeterDB {
                 int size_of_data;
 
                 memcpy(&size_of_data, data_pointer, sizeof (int));
-
-                size_of_data = std::min(size_of_data, (int)recordDescriptor[i].length);
-                char *buffer = (char*) malloc(size_of_data);
                 data_pointer += 4;
 
-                memcpy(buffer, data_pointer, size_of_data);
+                if (size_of_data == 0) {
+                    record_details.push_back("");
+                }
+                else {
+                    size_of_data = std::min(size_of_data, (int)recordDescriptor[i].length);
+                    char* buffer = (char*) malloc(size_of_data);
+                    memcpy(buffer, data_pointer, size_of_data);
 
-                data_pointer += size_of_data;
+                    data_pointer += size_of_data;
 
-                record_details.push_back(buffer);
+                    record_details.push_back(buffer);
+                    free(buffer);
+                }
             }
         }
         std::string output_str = "";
