@@ -169,7 +169,7 @@ namespace PeterDB {
                     fileHandle.readPage(i,existingPageBuf);
                     char* existingPageBufPtr = (char*)existingPageBuf;
                     int existingPageFreeSpace = *(int*)(existingPageBufPtr+PAGE_SIZE-1-4);
-                    printf("Page number: %d, Free space: %d\n", i, existingPageFreeSpace);
+//                    printf("Page number: %d, Free space: %d\n", i, existingPageFreeSpace);
                     if(existingPageFreeSpace > record_size+4){
                         existingPageFound = true;
                         break;
@@ -215,7 +215,7 @@ namespace PeterDB {
 
         // calculate formatted record size
         int recordSize =  calculateFormattedRecordSize(nullAttributesIndicatorSize,recordDescriptor);
-//        printf("total size of records before build: %d\n", recordSize);
+        //printf("total size of records before build: %d\n", recordSize);
         buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
 
@@ -231,13 +231,11 @@ namespace PeterDB {
         char* page = (char*) malloc(PAGE_SIZE);
         int pageNum = getPage(page, fileHandle, recordSize);
 
-        printf("num records in page: %d is:%d\n", pageNum, *(int*)(page+PAGE_SIZE-1-8));
-        // get num records 'n' from page
         char* page_ptr = page;
         char* slot_ptr = page_ptr+PAGE_SIZE-1-8;
         int num_records = *(int*)(page_ptr+PAGE_SIZE-1-8);
         int curr_free = *(int*)(page+PAGE_SIZE-1-4);
-        printf("free bytes in page: %d is : %d\n", pageNum, curr_free);
+//        printf("free bytes in page: %d is : %d\n", pageNum, curr_free);
         int seekLen=0;
         if(num_records == 0){
             copyRecordToPageBuf(record, recordSize, seekLen, page_ptr);
