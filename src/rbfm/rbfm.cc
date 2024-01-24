@@ -218,6 +218,8 @@ namespace PeterDB {
         //printf("total size of records before build: %d\n", recordSize);
         buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
+        printf("record size of file is: %d\n", recordSize);
+
         // write to page:
         // check if record size is greater than PAGE_SIZE: return -1 for now
         if(recordSize > PAGE_SIZE){
