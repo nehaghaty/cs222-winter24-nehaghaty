@@ -11,7 +11,24 @@
 
 ### 2. Using a Debugger
 - Describe how you use a debugger (gdb, or lldb, or CLion debugger) to debug your code and show screenshots. 
-For example, using breakpoints, step in/step out/step over, evaluate expressions, etc. 
+For example, using breakpoints, step in/step out/step over, evaluate expressions, etc.
+
+1. Set flags:
+   ```
+   cmake -DCMAKE_CXX_FLAGS=-g ../
+   ```
+2. Build code using cmake
+3. Run debugger command for sample test:
+   ```
+   $gdb --args /home/nghatysa/cs222-winter24-nehaghaty/cmake-build-debug/rbfmtest_public "--gtest_filter=RBFM_Test_2.varchar_compact_size"
+   ```
+4. Set break point using `break filename:linenumber` and call `run`:
+   
+   <img width="1020" alt="Screenshot 2024-01-23 at 11 17 18 PM" src="https://github.com/nehaghaty/cs222-winter24-nehaghaty/assets/25128989/720846c7-c454-481e-ac11-729f624d19eb">
+
+5. Hit breakpoint
+<img width="1394" alt="Screenshot 2024-01-23 at 11 17 23 PM" src="https://github.com/nehaghaty/cs222-winter24-nehaghaty/assets/25128989/cb05dd0d-c0cc-417e-932c-ea6bfa407733">
+
 
 
 ### 3. Using Valgrind
