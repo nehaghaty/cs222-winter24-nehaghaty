@@ -5,7 +5,8 @@
 #include <cmath>
 
 #define FIELD_BYTES        4
-#define OFFSET_BYTES        4
+#define OFFSET_BYTES       4
+#define CHAR_BIT           8
 
 namespace PeterDB {
     RecordBasedFileManager &RecordBasedFileManager::instance() {
@@ -150,7 +151,6 @@ namespace PeterDB {
     }
 
     int getPage(char *page, FileHandle &fileHandle, int record_size) {
-        int pageNum;
         if(fileHandle.getNumberOfPages() == 0){
             createNewPageDir(fileHandle, page);
             return fileHandle.getNumberOfPages()-1;
@@ -182,7 +182,7 @@ namespace PeterDB {
                 else{
                     createNewPageDir(fileHandle, page);
                     return fileHandle.getNumberOfPages()-1;
-                }
+//                }
             }
             else{
                 fileHandle.readPage(fileHandle.getNumberOfPages()-1, page);
