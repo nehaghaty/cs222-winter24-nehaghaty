@@ -441,7 +441,7 @@ namespace PeterDB {
                 }
                 else {
                     size_of_data = std::min(size_of_data, (int)recordDescriptor[i].length);
-                    char* buffer = (char*) malloc(size_of_data);
+                    char *buffer = (char*) malloc(size_of_data);
                     memcpy(buffer, data_pointer, size_of_data);
 
                     data_pointer += size_of_data;
