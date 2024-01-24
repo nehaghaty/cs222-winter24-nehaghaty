@@ -5,7 +5,8 @@
 #include <cmath>
 
 #define FIELD_BYTES        4
-#define OFFSET_BYTES        4
+#define OFFSET_BYTES       4
+#define CHAR_BIT           8
 
 namespace PeterDB {
     RecordBasedFileManager &RecordBasedFileManager::instance() {
@@ -152,7 +153,6 @@ namespace PeterDB {
     }
 
     int getPage(char *page, FileHandle &fileHandle, int record_size) {
-        int pageNum;
         if(fileHandle.getNumberOfPages() == 0){
             createNewPageDir(fileHandle, page);
             return fileHandle.getNumberOfPages()-1;
@@ -164,26 +164,26 @@ namespace PeterDB {
             int freeBytes = *(int*)(data + PAGE_SIZE - 1 - 4);
 
             if(record_size+4 > freeBytes){
-                bool existingPageFound = false;
-                int i=0;
-                void* existingPageBuf= malloc(PAGE_SIZE);
-                for(;i<fileHandle.getNumberOfPages();i++){
-                    fileHandle.readPage(i,existingPageBuf);
-                    char* existingPageBufPtr = (char*)existingPageBuf;
-                    int existingPageFreeSpace = *(int*)(existingPageBufPtr+PAGE_SIZE-1-4);
-                    if(existingPageFreeSpace > record_size+4){
-                        existingPageFound = true;
-                        break;
-                    }
-                }
-                if(existingPageFound){
-                    page = (char*)existingPageBuf;
-                    return i;
-                }
-                else{
+//                bool existingPageFound = false;
+//                int i=0;
+//                void* existingPageBuf= malloc(PAGE_SIZE);
+//                for(;i<fileHandle.getNumberOfPages();i++){
+//                    fileHandle.readPage(i,existingPageBuf);
+//                    char* existingPageBufPtr = (char*)existingPageBuf;
+//                    int existingPageFreeSpace = *(int*)(existingPageBufPtr+PAGE_SIZE-1-4);
+//                    if(existingPageFreeSpace > record_size+4){
+//                        existingPageFound = true;
+//                        break;
+//                    }
+//                }
+//                if(existingPageFound){
+//                    page = (char*)existingPageBuf;
+//                    return i;
+//                }
+//                else{
                     createNewPageDir(fileHandle, page);
                     return fileHandle.getNumberOfPages()-1;
-                }
+//                }
             }
             else{
                 fileHandle.readPage(fileHandle.getNumberOfPages()-1, page);
