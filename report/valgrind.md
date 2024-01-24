@@ -47,4 +47,4 @@ For example, using breakpoints, step in/step out/step over, evaluate expressions
   Sample run:
   - <img width="1173" alt="Screenshot 2024-01-23 at 11 27 13 PM" src="https://github.com/nehaghaty/cs222-winter24-nehaghaty/assets/25128989/ecb75785-c96b-4e53-8e58-56b0eb777c76">
 
-Link to PFM valgrind:
+Link to PFM valgrind: https://github.com/nehaghaty/cs222-winter24-nehaghaty/blob/main/valgrind-out-pfm.txt
