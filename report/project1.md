@@ -110,5 +110,6 @@ Total Test time (real) =   0.78 sec
 
 - Feedback on the project to help improve the project.
   - Autograder output should be more verbose. The current output from the autograder is not very helpful in debugging. Despite using an Ubuntu VM, we noticed differences in the test execution results.
-  -  
-  
+  - Example:
+  <img width="1194" alt="Screenshot 2024-01-23 at 11 36 22 PM" src="https://github.com/nehaghaty/cs222-winter24-nehaghaty/assets/25128989/c4e38b4a-fec5-437f-ba14-f4a5b41ad47c">
+
