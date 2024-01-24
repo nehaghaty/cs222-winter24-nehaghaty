@@ -182,7 +182,7 @@ namespace PeterDB {
                 else{
                     createNewPageDir(fileHandle, page);
                     return fileHandle.getNumberOfPages()-1;
-//                }
+                }
             }
             else{
                 fileHandle.readPage(fileHandle.getNumberOfPages()-1, page);
