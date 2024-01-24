@@ -1,12 +1,12 @@
 ## Debugger and Valgrind Report
 
 ### 1. Basic information
- - Team #:
- - Github Repo Link:
- - Student 1 UCI NetID:
- - Student 1 Name:
- - Student 2 UCI NetID (if applicable):
- - Student 2 Name (if applicable):
+ - Team #: 1
+ - Github Repo Link: https://github.com/nehaghaty/cs222-winter24-nehaghaty/
+ - Student 1 UCI NetID: nghatysa
+ - Student 1 Name: Neha Ghaty Satish
+ - Student 2 UCI NetID (if applicable): ssannell
+ - Student 2 Name (if applicable): Sanket Hanumappa Sannellappar
 
 
 ### 2. Using a Debugger
