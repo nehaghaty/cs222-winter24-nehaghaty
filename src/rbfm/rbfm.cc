@@ -115,7 +115,6 @@ namespace PeterDB {
             }
                 //varchar data
             else if (recordDescriptor[i].type == PeterDB::TypeVarChar) {
-                printf("recordsize before min is %d\n", *recordSize);
                 *recordSize -= recordDescriptor[i].length;
                 int dataSize;
 
@@ -123,7 +122,6 @@ namespace PeterDB {
 
                 dataSize = std::min(dataSize, (int)recordDescriptor[i].length);
                 *recordSize += dataSize;
-                printf("recordsize after min is %d\n", *recordSize);
 
                 dataPointer += 4;
 
@@ -164,23 +162,24 @@ namespace PeterDB {
             int freeBytes = *(int*)(data + PAGE_SIZE - 1 - 4);
 
             if(record_size+4 > freeBytes){
-//                bool existingPageFound = false;
-//                int i=0;
-//                void* existingPageBuf= malloc(PAGE_SIZE);
-//                for(;i<fileHandle.getNumberOfPages();i++){
-//                    fileHandle.readPage(i,existingPageBuf);
-//                    char* existingPageBufPtr = (char*)existingPageBuf;
-//                    int existingPageFreeSpace = *(int*)(existingPageBufPtr+PAGE_SIZE-1-4);
-//                    if(existingPageFreeSpace > record_size+4){
-//                        existingPageFound = true;
-//                        break;
-//                    }
-//                }
-//                if(existingPageFound){
-//                    page = (char*)existingPageBuf;
-//                    return i;
-//                }
-//                else{
+                bool existingPageFound = false;
+                int i=0;
+                void* existingPageBuf= malloc(PAGE_SIZE);
+                for(;i<fileHandle.getNumberOfPages();i++){
+                    fileHandle.readPage(i,existingPageBuf);
+                    char* existingPageBufPtr = (char*)existingPageBuf;
+                    int existingPageFreeSpace = *(int*)(existingPageBufPtr+PAGE_SIZE-1-4);
+                    printf("Page number: %d, Free space: %d\n", i, existingPageFreeSpace);
+                    if(existingPageFreeSpace > record_size+4){
+                        existingPageFound = true;
+                        break;
+                    }
+                }
+                if(existingPageFound){
+                    memcpy(page, existingPageBuf, PAGE_SIZE);
+                    return i;
+                }
+                else{
                     createNewPageDir(fileHandle, page);
                     return fileHandle.getNumberOfPages()-1;
 //                }
@@ -216,11 +215,11 @@ namespace PeterDB {
 
         // calculate formatted record size
         int recordSize =  calculateFormattedRecordSize(nullAttributesIndicatorSize,recordDescriptor);
-//        printf("total size of records before build: %d\n", recordSize);
+        //printf("total size of records before build: %d\n", recordSize);
         buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
 
-//        printf("total size of records: %d\n", recordSize);
+        printf("size of record: %d\n", recordSize);
 
         // write to page:
         // check if record size is greater than PAGE_SIZE: return -1 for now
@@ -229,7 +228,7 @@ namespace PeterDB {
         }
 
         // in memory page buffer
-        char* page = (char*)malloc(PAGE_SIZE);
+        char* page = (char*) malloc(PAGE_SIZE);
         int pageNum = getPage(page, fileHandle, recordSize);
 
         printf("num records in page: %d is:%d\n", pageNum, *(int*)(page+PAGE_SIZE-1-8));
@@ -268,10 +267,13 @@ namespace PeterDB {
         memcpy(slot_ptr, &recordSize, sizeof(short));
 
         fileHandle.writePage(pageNum, page);
+        printf("free bytes in page: %d is : %d\n", pageNum, newFree);
 
         //RID
         rid.pageNum = (unsigned)pageNum;
         rid.slotNum = (unsigned short)num_records-1;
+
+        printf("%u %hu\n", rid.pageNum, rid.slotNum);
 
         return 0;
     }
