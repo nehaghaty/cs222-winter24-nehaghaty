@@ -35,6 +35,7 @@ A. The offset of a null field points to the end of he previous record and the co
 ### 3. Page Format
 - Show your page format design.
 
+![pageformat drawio](https://github.com/nehaghaty/cs222-winter24-nehaghaty/assets/25128989/d04ebb9d-6109-4838-bd65-282136e0de73)
 
 
 - Explain your slot directory design if applicable.
