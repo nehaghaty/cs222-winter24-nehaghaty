@@ -455,7 +455,6 @@ namespace PeterDBTesting {
             ASSERT_EQ(rbfm.insertRecord(fileHandleLarge, recordDescriptorLarge, inBuffer, rid), success)
                                         << "Inserting a record should succeed.";
 
-            printf("file size: %d, large file size: %d\n", getFileSize(fileName), getFileSize(fileNameLarge));
             if (i % 1000 == 0 && i != 0) {
                 GTEST_LOG_(INFO) << i << "/" << numRecords << " records are inserted.";
                 ASSERT_TRUE(compareFileSizes(fileName, fileNameLarge)) << "Files should be the same size";
@@ -916,155 +915,82 @@ namespace PeterDBTesting {
         destroyFile = true;
     }
 
-//    TEST_F(RBFM_Test_2, insert_massive_records) {
-//        // Functions Tested:
-//        // 1. Create File
-//        // 2. Open File
-//        // 3. Insert 160000 records into File
-//
-//        PeterDB::RID rid;
-//        inBuffer = malloc(1000);
-//        outBuffer = malloc(1000);
-//        memset(inBuffer, 0, 1000);
-//        memset(outBuffer, 0, 1000);
-//
-//        int numRecords = 160000;
-//        int batchSize = 5000;
-//        std::vector<PeterDB::RID> rids;
-//
-//        std::vector<PeterDB::Attribute> recordDescriptorForTwitterUser;
-//
-//        createRecordDescriptorForTwitterUser(recordDescriptorForTwitterUser);
-//
-//        // NULL field indicator
-//        nullsIndicator = initializeNullFieldsIndicator(recordDescriptorForTwitterUser);
-//
-//        // Insert numRecords records into the file
-//        for (unsigned i = 0; i < numRecords / batchSize; i++) {
-//            for (unsigned j = 0; j < batchSize; j++) {
-//                memset(inBuffer, 0, 1000);
-//                size_t size = 0;
-//                prepareLargeRecordForTwitterUser((int) recordDescriptorForTwitterUser.size(), nullsIndicator,
-//                                                 i * batchSize + j, inBuffer, size);
-//                ASSERT_EQ(rbfm.insertRecord(fileHandle, recordDescriptorForTwitterUser, inBuffer, rid), success)
-//                                            << "Inserting a record for the file should succeed: " << fileName;
-//                rids.push_back(rid);
-//            }
-//
-//            if (i % 5 == 0 && i != 0) {
-//                GTEST_LOG_(INFO) << i << " / " << numRecords / batchSize << " batches (" << numRecords
-//                                 << " records) inserted so far for file: " << fileName;
-//            }
-//        }
-//        writeRIDsToDisk(rids);
-//        destroyFile = false;
-//    }
-//
-//    TEST_F(RBFM_Test_2, read_massive_records) {
-//        // Functions Tested:
-//        // 1. Read 160000 records from File
-//
-//        int numRecords = 160000;
-//        inBuffer = malloc(1000);
-//        outBuffer = malloc(1000);
-//        memset(inBuffer, 0, 1000);
-//        memset(outBuffer, 0, 1000);
-//
-//        std::vector<PeterDB::Attribute> recordDescriptorForTwitterUser;
-//        createRecordDescriptorForTwitterUser(recordDescriptorForTwitterUser);
-//
-//        // NULL field indicator
-//        nullsIndicator = initializeNullFieldsIndicator(recordDescriptorForTwitterUser);
-//
-//        std::vector<PeterDB::RID> rids;
-//        readRIDsFromDisk(rids, numRecords);
-//
-//        PeterDB::RID rid;
-//        ASSERT_EQ(rids.size(), numRecords);
-//        // Compare records from the disk read with the record created from the method
-//        for (unsigned i = 0; i < numRecords; i++) {
-//            memset(inBuffer, 0, 1000);
-//            memset(outBuffer, 0, 1000);
-//            rid = rids[i];
-//            ASSERT_EQ(rbfm.readRecord(fileHandle, recordDescriptorForTwitterUser, rids[i], outBuffer), success)
-//                                        << "Reading a record should succeed.";
-//            size_t size;
-//            prepareLargeRecordForTwitterUser((int) recordDescriptorForTwitterUser.size(), nullsIndicator, i, inBuffer, size);
-//            ASSERT_EQ(memcmp(inBuffer, outBuffer, size), 0) << "Reading unmatched data.";
-//        }
-//    }
-//
-//    TEST_F(RBFM_Test, testing) {
-//        // Functions tested
-//        // 1. Create Record-Based File
-//        // 2. Open Record-Based File
-//        // 3. Insert Record
-//        // 4. Read Record
-//        // 5. Close Record-Based File
-//        // 6. Destroy Record-Based File
-//
-//        PeterDB::RID rid;
-//        size_t recordSize = 0;
-//        inBuffer = malloc(100);
-//        outBuffer = malloc(100);
-//
-//        std::vector<PeterDB::Attribute> recordDescriptor;
-//        createRecordDescriptor(recordDescriptor);
-//
-//        // Initialize a NULL field indicator
-//        nullsIndicator = initializeNullFieldsIndicator(recordDescriptor);
-//
-//        // Insert a inBuffer into a file and print the inBuffer
-//        prepareRecord((int) (int) recordDescriptor.size(), nullsIndicator, 8, "Anteater", 25, 177.8, 6200, inBuffer, recordSize);
-//
-//        std::ostringstream stream;
-//        rbfm.printRecord(recordDescriptor, inBuffer, stream);
-//        /*ASSERT_NO_FATAL_FAILURE(
-//                checkPrintRecord("EmpName: Anteater, Age: 25, Height: 177.8, Salary: 6200", stream.str()));*/
-//
-//        ASSERT_EQ(rbfm.insertRecord(fileHandle, recordDescriptor, inBuffer, rid), success)
-//                                    << "Inserting a inBuffer should succeed.";
-//
-//        ASSERT_EQ(rid.pageNum,1);
-//        ASSERT_EQ(rid.slotNum,0);
-//
-//        ASSERT_EQ(rbfm.insertRecord(fileHandle, recordDescriptor, inBuffer, rid), success)
-//                                    << "Inserting a inBuffer should succeed.";
-//
-//        ASSERT_EQ(rid.pageNum,1);
-//        ASSERT_EQ(rid.slotNum,1);
-//
-//        ASSERT_EQ(fileHandle.getNumberOfPages(),1);
-//
-//        char* data = (char*)malloc(PAGE_SIZE);
-//        fileHandle.readPage(fileHandle.getNumberOfPages(), data);
-//        int free=0;
-//        memcpy(&free, data+PAGE_SIZE-1-4, sizeof(int));
-//        int num_records;
-//        memcpy(&num_records, data+PAGE_SIZE-1-8, sizeof(int));
-//        int record1_offset=0;
-//        memcpy(&record1_offset,data+PAGE_SIZE-1-8-4, sizeof(short));
-//        int record2_offset=0;
-//        memcpy(&record2_offset,data+PAGE_SIZE-1-8-8, sizeof(short));
-//
-//        printf("free is:%d\n", free);
-//
-//
-//
-//
-//        // Given the rid, read the inBuffer from file
-//        /*ASSERT_EQ(rbfm.readRecord(fileHandle, recordDescriptor, rid, outBuffer), success)
-//                                    << "Reading a inBuffer should succeed.";
-//
-//        stream.str(std::string());
-//        stream.clear();
-//        rbfm.printRecord(recordDescriptor, outBuffer, stream);
-//        ASSERT_NO_FATAL_FAILURE(
-//                checkPrintRecord("EmpName: Anteater, Age: 25, Height: 177.8, Salary: 6200", stream.str()));
-//
-//        // Compare whether the two memory blocks are the same
-//        ASSERT_EQ(memcmp(inBuffer, outBuffer, recordSize), 0) << "the read data should match the inserted data";*/
-//
-//    }
+    TEST_F(RBFM_Test_2, insert_massive_records) {
+        // Functions Tested:
+        // 1. Create File
+        // 2. Open File
+        // 3. Insert 160000 records into File
+
+        PeterDB::RID rid;
+        inBuffer = malloc(1000);
+        outBuffer = malloc(1000);
+        memset(inBuffer, 0, 1000);
+        memset(outBuffer, 0, 1000);
+
+        int numRecords = 160000;
+        int batchSize = 5000;
+        std::vector<PeterDB::RID> rids;
+
+        std::vector<PeterDB::Attribute> recordDescriptorForTwitterUser;
+
+        createRecordDescriptorForTwitterUser(recordDescriptorForTwitterUser);
+
+        // NULL field indicator
+        nullsIndicator = initializeNullFieldsIndicator(recordDescriptorForTwitterUser);
+
+        // Insert numRecords records into the file
+        for (unsigned i = 0; i < numRecords / batchSize; i++) {
+            for (unsigned j = 0; j < batchSize; j++) {
+                memset(inBuffer, 0, 1000);
+                size_t size = 0;
+                prepareLargeRecordForTwitterUser((int) recordDescriptorForTwitterUser.size(), nullsIndicator,
+                                                 i * batchSize + j, inBuffer, size);
+                ASSERT_EQ(rbfm.insertRecord(fileHandle, recordDescriptorForTwitterUser, inBuffer, rid), success)
+                                            << "Inserting a record for the file should succeed: " << fileName;
+                rids.push_back(rid);
+            }
+
+            if (i % 5 == 0 && i != 0) {
+                GTEST_LOG_(INFO) << i << " / " << numRecords / batchSize << " batches (" << numRecords
+                                 << " records) inserted so far for file: " << fileName;
+            }
+        }
+        writeRIDsToDisk(rids);
+        destroyFile = false;
+    }
+
+    TEST_F(RBFM_Test_2, read_massive_records) {
+        // Functions Tested:
+        // 1. Read 160000 records from File
+
+        int numRecords = 160000;
+        inBuffer = malloc(1000);
+        outBuffer = malloc(1000);
+        memset(inBuffer, 0, 1000);
+        memset(outBuffer, 0, 1000);
+
+        std::vector<PeterDB::Attribute> recordDescriptorForTwitterUser;
+        createRecordDescriptorForTwitterUser(recordDescriptorForTwitterUser);
+
+        // NULL field indicator
+        nullsIndicator = initializeNullFieldsIndicator(recordDescriptorForTwitterUser);
+
+        std::vector<PeterDB::RID> rids;
+        readRIDsFromDisk(rids, numRecords);
+
+        PeterDB::RID rid;
+        ASSERT_EQ(rids.size(), numRecords);
+        // Compare records from the disk read with the record created from the method
+        for (unsigned i = 0; i < numRecords; i++) {
+            memset(inBuffer, 0, 1000);
+            memset(outBuffer, 0, 1000);
+            rid = rids[i];
+            ASSERT_EQ(rbfm.readRecord(fileHandle, recordDescriptorForTwitterUser, rids[i], outBuffer), success)
+                                        << "Reading a record should succeed.";
+            size_t size;
+            prepareLargeRecordForTwitterUser((int) recordDescriptorForTwitterUser.size(), nullsIndicator, i, inBuffer, size);
+            ASSERT_EQ(memcmp(inBuffer, outBuffer, size), 0) << "Reading unmatched data.";
+        }
+    }
 
 }// namespace PeterDBTesting
