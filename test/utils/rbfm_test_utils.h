@@ -190,7 +190,7 @@ namespace PeterDBTesting {
             // Destruct the buffers
             free(inBuffer);
             free(outBuffer);
-            free(nullsIndicator);
+            delete[] nullsIndicator;
 
 
             // Close the file
@@ -942,7 +942,7 @@ namespace PeterDBTesting {
             // Destruct the buffers
             free(inBuffer);
             free(outBuffer);
-            free(nullsIndicator);
+            delete[] nullsIndicator;
 
             // Close the file
             ASSERT_EQ(rbfm.closeFile(fileHandle), success) << "Closing the file should not fail.";

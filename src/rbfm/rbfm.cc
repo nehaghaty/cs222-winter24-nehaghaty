@@ -138,7 +138,7 @@ namespace PeterDB {
 
     void createNewPageDir(FileHandle &fileHandle, char* page){
         char *inBuffer = (char*)malloc(PAGE_SIZE);
-//        memset(inBuffer,0,PAGE_SIZE);
+        memset(inBuffer,0,PAGE_SIZE);
         char* buf_ptr = inBuffer+PAGE_SIZE-1-4;
         int freeBytes = PAGE_SIZE - 8;
         memcpy(buf_ptr, &freeBytes, sizeof(int));
@@ -160,6 +160,7 @@ namespace PeterDB {
             char* data = (char*)malloc(PAGE_SIZE);
             fileHandle.readPage(fileHandle.getNumberOfPages()-1, data);
             int freeBytes = *(int*)(data + PAGE_SIZE - 1 - 4);
+            free(data);
 
             if(record_size+4 > freeBytes){
                 bool existingPageFound = false;
@@ -169,7 +170,6 @@ namespace PeterDB {
                     fileHandle.readPage(i,existingPageBuf);
                     char* existingPageBufPtr = (char*)existingPageBuf;
                     int existingPageFreeSpace = *(int*)(existingPageBufPtr+PAGE_SIZE-1-4);
-//                    printf("Page number: %d, Free space: %d\n", i, existingPageFreeSpace);
                     if(existingPageFreeSpace > record_size+4){
                         existingPageFound = true;
                         break;
@@ -177,10 +177,12 @@ namespace PeterDB {
                 }
                 if(existingPageFound){
                     memcpy(page, existingPageBuf, PAGE_SIZE);
+                    free(existingPageBuf);
                     return i;
                 }
                 else{
                     createNewPageDir(fileHandle, page);
+                    free(existingPageBuf);
                     return fileHandle.getNumberOfPages()-1;
                 }
             }
@@ -192,8 +194,6 @@ namespace PeterDB {
     }
 
     void copyRecordToPageBuf(char* record, int record_length, int seekLen, char* page_ptr){
-//        printf("record length: %d\n", record_length);
-//        printf("seek len: %d\n", seekLen);
         memcpy(page_ptr+seekLen,record, record_length);
     }
 
@@ -232,7 +232,6 @@ namespace PeterDB {
         char* slot_ptr = page_ptr+PAGE_SIZE-1-8;
         int num_records = *(int*)(page_ptr+PAGE_SIZE-1-8);
         int curr_free = *(int*)(page+PAGE_SIZE-1-4);
-//        printf("free bytes in page: %d is : %d\n", pageNum, curr_free);
         int seekLen=0;
         if(num_records == 0){
             copyRecordToPageBuf(record, recordSize, seekLen, page_ptr);
@@ -267,6 +266,8 @@ namespace PeterDB {
         rid.pageNum = (unsigned)pageNum;
         rid.slotNum = (unsigned short)num_records-1;
 
+        free(record);
+        free(page);
         return 0;
     }
 
@@ -282,7 +283,6 @@ namespace PeterDB {
             std::cout << "Error reading page" << std::endl;
 
         char *data_pointer = (char*)page_data;
-//        printf("%d\n", *(int*)(data_pointer + PAGE_SIZE - 9));
 
         short offset = *(short*)(data_pointer + PAGE_SIZE - 1 - 8 - 4 * (slot_num + 1));
         short length = *(short*)(data_pointer + PAGE_SIZE - 1 - 8 - 4 * (slot_num + 1) + 2);
@@ -296,11 +296,12 @@ namespace PeterDB {
         int bit_vector_size     =  (int)ceil((double)number_of_fields / 8);
         std::vector<bool> isNull;
 
+        // increment 4 bytes for num fields
         record_pointer += 4;
 
         //find out which fields are NULL
         for (int i = 0; i < bit_vector_size; i++) {
-            for (int bit = 7; bit >= 0; --bit) {
+            for (int bit = 7; bit >= 0; --bit){
                 // Check if the bit is set
                 bool isBitSet = (((char*)record_pointer)[i] & (1 << bit)) != 0;
 
@@ -313,9 +314,11 @@ namespace PeterDB {
         total_size += bit_vector_size;
         for (int i = 0; i < number_of_fields; i++) {
             total_size += recordDescriptor[i].length;
-            if (recordDescriptor[i].type == 2)
+            if (recordDescriptor[i].type == 2){
                 total_size += 4;
+            }
         }
+        //  this is deserialzed format size
         char *data_to_be_returned = (char*) malloc(total_size);
         memset(data_to_be_returned, 0, total_size);
 
@@ -367,7 +370,10 @@ namespace PeterDB {
                 offset_pointer += 4;
             }
         }
-        memcpy(data, data_to_be_returned, record_pointer - record);
+        memcpy(data, data_to_be_returned, new_data_pointer - data_to_be_returned);
+        free(page_data);
+        free(record);
+        free(data_to_be_returned);
         return 0;
     }
 
@@ -414,14 +420,13 @@ namespace PeterDB {
 
                 //float data
             else if (recordDescriptor[i].type == 1) {
-
                 float real_data;
                 std::ostringstream ss;
                 memcpy(&real_data, data_pointer, sizeof (float));
                 ss << real_data;
 
                 data_pointer += 4;
-//                std::cout << "insert  " << real_data << std::endl;
+
                 record_details.push_back(ss.str());
             }
                 //varchar data
@@ -436,7 +441,8 @@ namespace PeterDB {
                 }
                 else {
                     size_of_data = std::min(size_of_data, (int)recordDescriptor[i].length);
-                    char* buffer = (char*) malloc(size_of_data);
+                    char* buffer = (char*) malloc(size_of_data+1);
+                    buffer[size_of_data]=0;
                     memcpy(buffer, data_pointer, size_of_data);
 
                     data_pointer += size_of_data;
