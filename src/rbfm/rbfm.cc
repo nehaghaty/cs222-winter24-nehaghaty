@@ -4,9 +4,20 @@
 #include <sstream>
 #include <cmath>
 
-#define FIELD_BYTES        4
-#define OFFSET_BYTES       4
+// record constants
+typedef unsigned OffsetLength;
+typedef unsigned NumFieldsLength;
+//page constants
+typedef unsigned short SlotSubFieldLength;
+typedef unsigned SlotLength;
+typedef unsigned NumRecordsLength;
+typedef unsigned FreeSpaceLength;
+// raw data constants
+typedef unsigned VarCharLength;
+
 #define CHAR_BIT           8
+#define NUM_RECORDS_OFFSET (PAGE_SIZE-sizeof(FreeSpaceLength)-sizeof(NumRecordsLength)-1)
+#define FREE_SPACE_OFFSET (PAGE_SIZE-sizeof(FreeSpaceLength)-1)
 
 namespace PeterDB {
     RecordBasedFileManager &RecordBasedFileManager::instance() {
@@ -46,11 +57,11 @@ namespace PeterDB {
     static int calculateFormattedRecordSize(int nullAttributesIndicatorSize,
                                             const std::vector<Attribute> &recordDescriptor){
         int recordSize = 0;
-        recordSize += FIELD_BYTES; //number of fields
+        recordSize += sizeof(NumFieldsLength); //number of fields
         recordSize += nullAttributesIndicatorSize; //null bit vector
 
         for (int i = 0; i < recordDescriptor.size(); i++) {
-            recordSize += OFFSET_BYTES; //offsets
+            recordSize += sizeof(OffsetLength); //offsets
             recordSize += recordDescriptor[i].length;
         }
         return recordSize;
@@ -60,79 +71,53 @@ namespace PeterDB {
                             std::vector<bool> isNull){
         //start filling the record
         int fieldCount = recordDescriptor.size();
-        record = (char*)malloc(*recordSize);
+        record = new char[*recordSize];
         memset (record, 0, *recordSize);
 
-        char *dataPointer = (char*)data;
+        const char *dataPointer = static_cast<const char*>(data);
         char* recordPointer = record;
-        *((int *)recordPointer) = fieldCount;
-        recordPointer += 4;
-        memcpy(recordPointer, data, nullAttributesIndicatorSize);
+        memcpy(recordPointer, &fieldCount, sizeof(int));
+        recordPointer += sizeof(NumFieldsLength);
+        memcpy(recordPointer, dataPointer, nullAttributesIndicatorSize);
         recordPointer += nullAttributesIndicatorSize;
         dataPointer += nullAttributesIndicatorSize;
 
         char* offsetPointer = recordPointer;
-        recordPointer += (sizeof(int) * fieldCount);
+        recordPointer += sizeof(OffsetLength) * fieldCount;
 
         // creating record from the original data format
         for (int i = 0; i < fieldCount; i++) {
             if (isNull[i]) {
                 int offset = recordPointer - record;
                 std::memcpy((int*)offsetPointer, &offset, sizeof (int));
-                offsetPointer += 4;
+                offsetPointer += sizeof(OffsetLength);
                 continue;
             }
 
-            //integer data
-            if (recordDescriptor[i].type == PeterDB::TypeInt) {
-
-                int int_data;
-                memcpy(&int_data, dataPointer, sizeof (int));
-
-                dataPointer += 4;
-
-                memcpy((int*)recordPointer, &int_data, sizeof (int));
-                recordPointer += 4;
-
-                int offset = recordPointer - record;
-                memcpy((int*)offsetPointer, &offset, sizeof (int));
-                offsetPointer +=4 ;
+            switch (recordDescriptor[i].type) {
+                case PeterDB::TypeInt:
+                case PeterDB::TypeReal: {
+                    memcpy(recordPointer, dataPointer, sizeof(int));
+                    recordPointer += sizeof(int);
+                    dataPointer += sizeof(int);
+                    break;
+                }
+                case PeterDB::TypeVarChar: {
+                    unsigned dataSize;
+                    memcpy(&dataSize, dataPointer, sizeof(int));
+                    dataSize = std::min(dataSize, recordDescriptor[i].length);
+                    *recordSize += dataSize - recordDescriptor[i].length;
+                    dataPointer += sizeof(int);
+                    memcpy(recordPointer, dataPointer, dataSize);
+                    recordPointer += dataSize;
+                    dataPointer += dataSize;
+                    break;
+                }
             }
-                //float data
-            else if (recordDescriptor[i].type == PeterDB::TypeReal) {
 
-                float real_data;
-                memcpy(&real_data, dataPointer, sizeof (float));
-
-                dataPointer += 4;
-
-                memcpy((float*)recordPointer, &real_data, sizeof (float));
-                recordPointer += 4;
-
-                int offset = recordPointer - record;
-                memcpy((int*)offsetPointer, &offset, sizeof (int));
-                offsetPointer +=4 ;
-            }
-                //varchar data
-            else if (recordDescriptor[i].type == PeterDB::TypeVarChar) {
-                *recordSize -= recordDescriptor[i].length;
-                int dataSize;
-
-                memcpy(&dataSize, dataPointer, sizeof (int));
-
-                dataSize = std::min(dataSize, (int)recordDescriptor[i].length);
-                *recordSize += dataSize;
-
-                dataPointer += 4;
-
-                memcpy(recordPointer, dataPointer, dataSize);
-                recordPointer += dataSize;
-                dataPointer += dataSize;
-
-                int offset = recordPointer - record;
-                memcpy((int*)offsetPointer, &offset, sizeof (int));
-                offsetPointer +=4 ;
-            }
+            int recordOffset = recordPointer - record;
+            memcpy(offsetPointer, &recordOffset, sizeof(OffsetLength));
+            offsetPointer += sizeof(OffsetLength);
         }
     }
 
@@ -193,187 +178,203 @@ namespace PeterDB {
         }
     }
 
-    void copyRecordToPageBuf(char* record, int record_length, int seekLen, char* page_ptr){
+    void copyRecordToPageBuf(const char* record, int record_length, int seekLen, char* page_ptr){
         memcpy(page_ptr+seekLen,record, record_length);
+    }
+
+    void encodeBytes(bool isTombstone, unsigned char& buffer) {
+    if (isTombstone) {
+        buffer |= (1 << 7); // Set first bit to 1
+    } else {
+        buffer &= ~(1 << 7); // Set first bit to zero
+    }
+    }
+
+    bool decodeBytes(const unsigned char& buffer) {
+    return (buffer & (1 << 7)) != 0; // Checks if the first bit is 1
+}
+   
+    void writeRecordToPage(const char* record, int recordSize, FileHandle &fileHandle, RID &rid) {
+        char *page = new char[PAGE_SIZE];
+        int pageNum = getPage(page, fileHandle, recordSize);
+
+        char *pagePtr = page;
+        char *slotPtr = pagePtr + NUM_RECORDS_OFFSET;
+        int numRecords = *(int *)(pagePtr + NUM_RECORDS_OFFSET);
+        int currFree = *(int *)(page + FREE_SPACE_OFFSET);
+        int seekLen = 0;
+
+        if (numRecords == 0) {
+            copyRecordToPageBuf(record, recordSize, seekLen, pagePtr);
+        } else {
+            int skipBytes = numRecords * sizeof(SlotLength);
+            char *slot = slotPtr - skipBytes;
+            short offset = *(short *)slot;
+            slot += sizeof(SlotSubFieldLength);
+            short recordLength = *(short *)slot;
+            seekLen = offset + recordLength;
+            copyRecordToPageBuf(record, recordSize, seekLen, pagePtr);
+        }
+
+        // increment number of records
+        numRecords += 1;
+        *(int *)(page + NUM_RECORDS_OFFSET) = numRecords;
+
+        // calculate new free space
+        int newFree = currFree - recordSize - sizeof(SlotLength);
+        *(int *)(page + FREE_SPACE_OFFSET) = newFree;
+
+        // update slot info for the new record
+        slotPtr = page + NUM_RECORDS_OFFSET - numRecords * sizeof(SlotLength);
+        *(short *)slotPtr = seekLen;
+        *(short *)(slotPtr + sizeof(SlotSubFieldLength)) = recordSize;
+
+        fileHandle.writePage(pageNum, page);
+        delete[] page;
+
+        //RID
+        rid.pageNum = (unsigned)pageNum;
+        rid.slotNum = (unsigned short)numRecords-1;
+    }
+    
+    void processBitVector(std::vector<bool>& nullBitVector, int nullAttributesIndicatorSize, const void* bitArrayPointer) {
+            for (int i = 0; i < nullAttributesIndicatorSize; i++) {
+                for (int bit = CHAR_BIT-1; bit >= 0; --bit) {
+                // Check if the bit is set
+                nullBitVector.push_back((((char*)bitArrayPointer)[i] & (1 << bit)) != 0);
+            }
+        }
     }
 
     RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
                                             const void *data, RID &rid) {
         int fieldCount = recordDescriptor.size();
-        char *record = nullptr;
-
         int nullAttributesIndicatorSize = getActualByteForNullsIndicator(fieldCount);
         std::vector<bool> isNull;
 
-        //find out which fields are NULL
-        for (int i = 0; i < nullAttributesIndicatorSize; i++) {
-            for (int bit = CHAR_BIT-1; bit >= 0; --bit) {
-                // Check if the bit is set
-                isNull.push_back((((char*)data)[i] & (1 << bit)) != 0);
-            }
-        }
+        // Set bits for NULL fields
+        processBitVector(isNull, nullAttributesIndicatorSize, data);
 
-        // calculate formatted record size
+        // Calculate formatted record size
         int recordSize =  calculateFormattedRecordSize(nullAttributesIndicatorSize,recordDescriptor);
-        //printf("total size of records before build: %d\n", recordSize);
+        char *record = nullptr;
+
         buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
 
-        // write to page:
-        // check if record size is greater than PAGE_SIZE: return -1 for now
-        if(recordSize > PAGE_SIZE){
-            return -1;
+        if (recordSize > PAGE_SIZE) {
+        delete[] record;
+        return -1;
         }
 
-        // in memory page buffer
-        char* page = (char*) malloc(PAGE_SIZE);
-        int pageNum = getPage(page, fileHandle, recordSize);
+        writeRecordToPage(record, recordSize,fileHandle, rid);
 
-        char* page_ptr = page;
-        char* slot_ptr = page_ptr+PAGE_SIZE-1-8;
-        int num_records = *(int*)(page_ptr+PAGE_SIZE-1-8);
-        int curr_free = *(int*)(page+PAGE_SIZE-1-4);
-        int seekLen=0;
-        if(num_records == 0){
-            copyRecordToPageBuf(record, recordSize, seekLen, page_ptr);
-        }
-        else{
+        delete[] record;
 
-            int skipBytes = num_records*4;
-            char* slot = slot_ptr-skipBytes;
-            short offset = *(short*) slot;
-            slot+=2;
-            short length = *(short*) slot;
-            seekLen = offset+length;
-            copyRecordToPageBuf(record, recordSize, seekLen, page_ptr);
-        }
-        // update number of records
-        num_records++;
-        page_ptr = page_ptr+PAGE_SIZE-1-8;
-        memcpy(page_ptr, &num_records, sizeof(int));
-        page_ptr = page_ptr+4;
-        int newFree = curr_free - recordSize - 4; // reduce free size by slot (4 bytes) and record size
-        memcpy(page_ptr,&newFree, sizeof(int));
-        slot_ptr = slot_ptr-num_records*4;
-        // add offset of new record
-        memcpy(slot_ptr,&seekLen, sizeof(short));
-        slot_ptr+=2;
-        // add length of new record
-        memcpy(slot_ptr, &recordSize, sizeof(short));
-
-        fileHandle.writePage(pageNum, page);
-
-        //RID
-        rid.pageNum = (unsigned)pageNum;
-        rid.slotNum = (unsigned short)num_records-1;
-
-        free(record);
-        free(page);
         return 0;
+    }
+
+    std::pair<short, short> readSlotInformation(const char* dataPointer, int slotNum) {
+        short slotOffset = *(short*)(dataPointer + NUM_RECORDS_OFFSET - sizeof(SlotLength) * (slotNum + 1));
+        short length = *(short*)(dataPointer + NUM_RECORDS_OFFSET - sizeof(SlotLength) * (slotNum + 1) + sizeof(SlotSubFieldLength));
+        return {slotOffset, length};
+    }
+    
+    int getDeserializedRecordSize(const std::vector<Attribute>& recordDescriptor, int nullAttributesIndicatorSize) {
+        
+        int deserializedRecordSize = nullAttributesIndicatorSize;
+        
+        for (const auto& attr : recordDescriptor) {
+            deserializedRecordSize += attr.length;
+            if (attr.type == PeterDB::TypeVarChar) {
+                deserializedRecordSize += sizeof(VarCharLength);
+            }
+        }
+        return deserializedRecordSize;
+    
     }
 
     RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
                                           const RID &rid, void *data) {
-        int page_num = rid.pageNum;
-        int slot_num = rid.slotNum;
+        int pageNum = rid.pageNum;
+        int slotNum = rid.slotNum;
 
-        void *page_data = malloc(PAGE_SIZE);
-        memset(page_data, 0, PAGE_SIZE);
+        // void *pageData = malloc(PAGE_SIZE);
+        char* pageData = new char[PAGE_SIZE]{};
+        // memset(pageData, 0, PAGE_SIZE);
 
-        if (fileHandle.readPage(page_num, page_data))
+        if (fileHandle.readPage(pageNum, pageData)){
             std::cout << "Error reading page" << std::endl;
+            return -1;
+            }
 
-        char *data_pointer = (char*)page_data;
+        char *dataPointer = (char*)pageData;
 
-        short offset = *(short*)(data_pointer + PAGE_SIZE - 1 - 8 - 4 * (slot_num + 1));
-        short length = *(short*)(data_pointer + PAGE_SIZE - 1 - 8 - 4 * (slot_num + 1) + 2);
+        auto [slotOffset, length] = readSlotInformation(pageData, slotNum);
 
-        char *record = (char*) malloc(length);
-        memcpy(record, data_pointer + offset, length);
-        char *record_pointer = record;
+        char* record = new char[length];
+        memcpy(record, pageData + slotOffset, length);
+        delete[] pageData;
+        // char *record = (char*) malloc(length);
+        // memcpy(record, dataPointer + slotOffset, length);
+ 
+
+        int numFields  =  recordDescriptor.size();
+        int nullAttributesIndicatorSize =  getActualByteForNullsIndicator(numFields);
+        
+        // Set bits for NULL fields
+        std::vector<bool> isNull;
+        processBitVector(isNull, nullAttributesIndicatorSize, record + sizeof(NumFieldsLength));
 
         //deserialize
-        int number_of_fields    =  recordDescriptor.size();
-        int bit_vector_size     =  (int)ceil((double)number_of_fields / 8);
-        std::vector<bool> isNull;
+        int deserializedRecordSize = getDeserializedRecordSize(recordDescriptor, nullAttributesIndicatorSize);
 
-        // increment 4 bytes for num fields
-        record_pointer += 4;
+        
+        char* deserializedRecordBuf = new char[deserializedRecordSize]{};
+        char* deserializedRecordBufPtr = deserializedRecordBuf;
 
-        //find out which fields are NULL
-        for (int i = 0; i < bit_vector_size; i++) {
-            for (int bit = 7; bit >= 0; --bit){
-                // Check if the bit is set
-                bool isBitSet = (((char*)record_pointer)[i] & (1 << bit)) != 0;
+        // copy record to deserialized record
+        char* recordPointer = record + sizeof(NumFieldsLength);
+        memcpy(deserializedRecordBufPtr, recordPointer, nullAttributesIndicatorSize);
 
-                isNull.push_back(isBitSet);
-            }
-        }
+        recordPointer += nullAttributesIndicatorSize;
+        deserializedRecordBufPtr += nullAttributesIndicatorSize;
 
-        int total_size =  0;
+        char *recordOffsetPointer = recordPointer;
+        recordPointer += numFields * sizeof(OffsetLength);
 
-        total_size += bit_vector_size;
-        for (int i = 0; i < number_of_fields; i++) {
-            total_size += recordDescriptor[i].length;
-            if (recordDescriptor[i].type == 2){
-                total_size += 4;
-            }
-        }
-        //  this is deserialzed format size
-        char *data_to_be_returned = (char*) malloc(total_size);
-        memset(data_to_be_returned, 0, total_size);
-
-        char *new_data_pointer = data_to_be_returned;
-        memcpy(new_data_pointer, record_pointer, bit_vector_size);
-
-        record_pointer += bit_vector_size;
-        new_data_pointer += bit_vector_size;
-
-        char *offset_pointer = record_pointer;
-        record_pointer += number_of_fields * sizeof (int);
-
-        for (int i = 0; i < number_of_fields; i++) {
+        for (int i = 0; i < numFields; i++) {
             if (isNull[i]) {
-                offset_pointer += 4;
+                recordOffsetPointer += sizeof(OffsetLength);
                 continue;
             }
-            if (recordDescriptor[i].type == 0) {
-                int int_data;
-                memcpy(&int_data, record_pointer, sizeof (int));
+            switch (recordDescriptor[i].type) {
+                case PeterDB::TypeInt: // int
+                case PeterDB::TypeReal: { // float
+                    // Since the size of int and float is the same, we can handle them in the same case
+                    memcpy(deserializedRecordBufPtr, recordPointer, sizeof(int));
+                    recordPointer += sizeof(int);
+                    deserializedRecordBufPtr += sizeof(int);
+                    recordOffsetPointer += sizeof(int);
+                    break;
+                }
+                case PeterDB::TypeVarChar: { // string
+                    int stringLen = record + *(int*)recordOffsetPointer - recordPointer;
+                    memcpy((int*)deserializedRecordBufPtr, &stringLen, sizeof (VarCharLength));
+                    deserializedRecordBufPtr += sizeof(VarCharLength);
 
-                record_pointer += 4;
+                    memcpy(deserializedRecordBufPtr, recordPointer, stringLen);
 
-                memcpy((int*)new_data_pointer, &int_data, sizeof (int));
-                new_data_pointer += 4;
-
-                offset_pointer +=4 ;
-            }
-            else if (recordDescriptor[i].type == 1) {
-                int float_data;
-                memcpy(&float_data, record_pointer, sizeof (float));
-
-                record_pointer += 4;
-
-                memcpy((int*)new_data_pointer, &float_data, sizeof (float));
-                new_data_pointer += 4;
-
-                offset_pointer +=4 ;
-            }
-            else if (recordDescriptor[i].type == 2) {
-                int length_of_string = record + *(int*)offset_pointer - record_pointer;
-                memcpy((int*)new_data_pointer, &length_of_string, sizeof (int));
-                new_data_pointer += 4;
-
-                memcpy(new_data_pointer, record_pointer, length_of_string);
-
-                new_data_pointer += length_of_string;
-                record_pointer += length_of_string;
-                offset_pointer += 4;
+                    deserializedRecordBufPtr += stringLen;
+                    recordPointer += stringLen;
+                    recordOffsetPointer += sizeof(OffsetLength);
+                    break;
+                }
             }
         }
-        memcpy(data, data_to_be_returned, new_data_pointer - data_to_be_returned);
-        free(page_data);
-        free(record);
-        free(data_to_be_returned);
+        
+        memcpy(data, deserializedRecordBuf, deserializedRecordSize);
+        delete[] record;
+        delete[] deserializedRecordBuf;
         return 0;
     }
 
