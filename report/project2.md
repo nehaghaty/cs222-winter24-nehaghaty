@@ -62,12 +62,21 @@ Columns table:
 
 ### 6. Describe the following operation logic.
 - Delete a record
-  - 
+    - Logic:
+        - Load the page containing the record specified by RID.
+        - Check if the record is a tombstone (indicating the actual data is stored elsewhere).
+            - If yes, delete the actual data using the redirected RID and then delete the tombstone record itself.
+            - If no, proceed to delete the record directly from the current page.
+        - For deletion, calculate the record's offset and length, and then shift subsequent data in the page to fill the gap left by the deleted record.
+        - Update the slot directory to mark the record's slot as deleted and adjust offsets for subsequent records.
+        - Update the page's metadata to reflect the new amount of free space.
+        - Write the modified page back to the file.
+        - Release any dynamically allocated memory. 
+
 
 
 - Update a record
-   - Logic:
-      
+   - Logic: 
       - Allocate memory to read the target page using the given RID.
       - Read the page. If reading fails, return an error code.
       - Extract the old record's offset and length from the page.
