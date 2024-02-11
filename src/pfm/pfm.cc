@@ -18,7 +18,7 @@ namespace PeterDB {
     PagedFileManager &PagedFileManager::operator=(const PagedFileManager &) = default;
 
     // Check whether the given file exists
-    bool fileExists(const std::string &fileName) {
+    static bool fileExists(const std::string &fileName) {
         struct stat stFileInfo{};
 
         return stat(fileName.c_str(), &stFileInfo) == 0;
