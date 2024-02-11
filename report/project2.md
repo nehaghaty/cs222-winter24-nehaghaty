@@ -97,15 +97,22 @@ Columns table:
 
 
 - Scan on normal records
-
-
+  - We first get the following inputs from the upper layer:
+      - tablename
+      - condition attribute
+      - condition attribute value
+      - Projected attributed names
+      - instance of scan Iterator
+  - Then we call getNextRecord to go through each record in that table.
+  - If a record satisfies the condition given in the input, the projected attributes' values are taken from that record and returned to the caller. 
 
 - Scan on deleted records
-
+   - While getNextRecord is reading a record, if the offset is -1, then we skip that record and go to the next one. 
 
 
 - Scan on updated records
-
+   - While getNextRecord is reading a record, if the tombstone byte is set (first byte of the record), then we skip that record and go to the next one.
+   - Because we know that when scanning through the records, the original record will be encountered sooner or later. 
 
 
 ### 7. Implementation Detail
