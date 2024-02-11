@@ -1033,8 +1033,7 @@ namespace PeterDB {
 
         char *bitvector;
         processSelectedAttributes (attributeNames, attributePositions, bitvector, isNull);
-        //TODO: copy neha's code of bitset
-        //memcpy(deSerRecordPointer, bitvector, newBitVectorSize);
+        memcpy(deSerRecordPointer, bitvector, newBitVectorSize);
 
         deSerRecordPointer += newBitVectorSize;
         OGRecordPointer += originalBitVectorSize;
