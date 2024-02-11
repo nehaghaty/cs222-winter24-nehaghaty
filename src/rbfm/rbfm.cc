@@ -312,7 +312,6 @@ namespace PeterDB {
         char *record = nullptr;
 
         buildRecord(&recordSize, record, recordDescriptor, data, nullAttributesIndicatorSize, isNull);
-
         if (recordSize > PAGE_SIZE) {
             delete[] record;
             return -1;
@@ -840,7 +839,322 @@ namespace PeterDB {
                                     const std::string &conditionAttribute, const CompOp compOp, const void *value,
                                     const std::vector<std::string> &attributeNames,
                                     RBFM_ScanIterator &rbfm_ScanIterator) {
-        return -1;
+        rbfm_ScanIterator.fileHandle = fileHandle;
+        rbfm_ScanIterator.attributeNames = attributeNames;
+        rbfm_ScanIterator.recordDescriptor = recordDescriptor;
+        rbfm_ScanIterator.compOp = compOp;
+        rbfm_ScanIterator.conditionAttribute = conditionAttribute;
+        rbfm_ScanIterator.currentPage = 0;
+        rbfm_ScanIterator.slotNum = 0;
+
+        for (int i = 0; i < recordDescriptor.size(); i++) {
+            rbfm_ScanIterator.attributePositions[recordDescriptor[i].name] = i;
+        }
+        if (compOp != NO_OP) {
+            if (rbfm_ScanIterator.attributePositions.find(conditionAttribute) != rbfm_ScanIterator.attributePositions.end())
+                rbfm_ScanIterator.compValType = recordDescriptor[rbfm_ScanIterator.attributePositions[conditionAttribute]].type;
+
+            else {
+                std::cout << "Attribute doesn't exist " << std::endl;
+                return -1;
+            }
+
+            if (rbfm_ScanIterator.compValType == TypeVarChar) {
+                int length = *(int*)value;
+                rbfm_ScanIterator.value = (char*)malloc(length + sizeof (int));
+                memcpy(rbfm_ScanIterator.value, value, length + sizeof (int));
+            }
+            else{
+                rbfm_ScanIterator.value = (char*)malloc(sizeof (int));
+                memcpy(rbfm_ScanIterator.value, value, sizeof (int));
+            }
+        }
+        return 0;
+    }
+
+    RC readStoredRecord (RID &rid, char *&record, char *page) {
+        char *slotPointer = page + PAGE_SIZE - 1 - (NUM_SLOTS_BYTES + FREE_SPACE_BYTES);
+        char *slotRequired = slotPointer - (rid.slotNum + 1) * SLOT_SIZE;
+
+        int offset = *(short*)slotRequired;
+        int length = *((short*)(slotRequired + sizeof (SlotSubFieldLength)));
+
+        record = (char*) malloc(length);
+        memset(record, 0, length);
+        memcpy(record, page + offset ,length);
+        return 0;
+    }
+    RC checkAttributeNull (char *record, int position) {
+        int bitsetPosition = position / CHAR_BIT;
+        std::bitset<8> Bitset;
+        memcpy(&Bitset, record + sizeof (int) + sizeof (TombstoneByte) + bitsetPosition, 1);
+//        std::cout << Bitset << std::endl;
+        return (Bitset.test(position % CHAR_BIT));
+    }
+    RC readSingleAttribute (char *record, char *&attributeValue, int position, AttrType type, int numFields) {
+        int bitVectorSize = getActualByteForNullsIndicator (numFields);
+        if (checkAttributeNull(record, position))
+            return -1;
+
+        char *offsetPointer = record + sizeof (int) + sizeof (TombstoneByte) + bitVectorSize;
+        char *slotRequired = offsetPointer + (position * sizeof (OffsetLength));
+        char *starting, *ending;
+
+        ending = record + (*(int*)slotRequired);
+
+        if (position == 0) {
+            starting = offsetPointer + (numFields * sizeof (OffsetLength));
+        } else {
+            starting = record + (*(int*)(slotRequired - sizeof (OffsetLength)));
+        }
+
+        int totalSize = ending - starting;
+        if (type == TypeVarChar) {
+            attributeValue = (char*) malloc(totalSize + sizeof (int));
+            *(int*)attributeValue = totalSize;
+            memcpy(attributeValue + sizeof (totalSize), starting, ending - starting);
+        }
+        else {
+            attributeValue = (char*) malloc(totalSize);
+            memcpy(attributeValue, starting, ending - starting);
+        }
+
+        return 0;
+    }
+    RC compareIntegerAttributes (int a, int b, CompOp compOp) {
+        switch (compOp) {
+            case EQ_OP: return (a == b);
+            case LT_OP: return (a < b);
+            case LE_OP: return (a <= b);
+            case GT_OP: return (a > b);
+            case GE_OP: return (a >= b);
+            case NE_OP: return (a != b);
+        }
+    }
+
+    RC compareRealAttributes (float a, float b, CompOp compOp) {
+        switch (compOp) {
+            case EQ_OP: return (a == b);
+            case LT_OP: return (a < b);
+            case LE_OP: return (a <= b);
+            case GT_OP: return (a > b);
+            case GE_OP: return (a >= b);
+            case NE_OP: return (a != b);
+        }
+    }
+    RC compareVarCharAttributes(std::string a, std::string b, CompOp compOp) {
+        switch (compOp) {
+            case EQ_OP: return (a == b);
+            case LT_OP: return (a < b);
+            case LE_OP: return (a <= b);
+            case GT_OP: return (a > b);
+            case GE_OP: return (a >= b);
+            case NE_OP: return (a != b);
+        }
+    }
+
+    RC compareAttributes (void *attribute, void *value, CompOp compOp, AttrType type) {
+        if (type == TypeVarChar){
+            std::string attrString((char*)((char*)attribute + sizeof (int)), *(int*)attribute);
+            std::string valString((char*)value + sizeof (int), *(int*)value);
+
+            return (false == compareVarCharAttributes(attrString, valString, compOp));
+
+        } else if (type == TypeInt) {
+            int attrInt = *(int*)attribute;
+            int valInt = *(int*)value;
+            return (false == compareIntegerAttributes (attrInt, valInt, compOp));
+        }
+        else {
+            float attrReal = *(float*)attribute;
+            float valReal = *(float*)value;
+            return (false == compareRealAttributes(attrReal, valReal, compOp));
+        }
+        return 0;
+    }
+    void processSelectedAttributes(const std::vector<std::string>&attributeNames, std::unordered_map<std::string, int> &attributePositions,
+                                   char *&result, std::vector<bool> isNull){
+        size_t selectedFieldSize = attributeNames.size();
+        result = (char*) malloc((selectedFieldSize+7) /8);
+        memset(result, 0, (selectedFieldSize + 7) / 8);
+        std::vector<int> positions (selectedFieldSize);
+        for(int i=0; i < selectedFieldSize; i++){
+            positions[i] = attributePositions[attributeNames[i]];
+            //std::cout << attributeNames[i] << positions[i] << std::endl;
+        }
+        std::sort(positions.begin(), positions.begin() + selectedFieldSize);
+        for (int i = 0; i < selectedFieldSize; ++i) {
+            // Calculate destination position
+            int destByteIndex = i / 8;
+            int destBitIndex = i % 8;
+
+            if (isNull[positions[i]]) {
+                result[destByteIndex] |= (1 << (7 - destBitIndex));
+            }
+        }
+        std::bitset<8> Bitset;
+        memcpy(&Bitset, result, 1);
+        //std::cout << isNull[1] << " "<<Bitset << std::endl;
+    }
+    RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&recordDescriptor,
+                                      const std::vector<std::string>&attributeNames,
+                                      void *&data, std::unordered_map<std::string, int> &attributePositions) {
+
+        char *OGRecordPointer = record + sizeof (int) + sizeof (TombstoneByte);
+        int fieldCount = recordDescriptor.size();
+        std::vector <bool> validAttributesIndex (recordDescriptor.size(), false);
+        for (auto i: attributeNames) {
+            validAttributesIndex[attributePositions[i]] = true;
+        }
+
+        int originalBitVectorSize = getActualByteForNullsIndicator(fieldCount);
+
+        std::vector<bool> isNull;
+        char *bitVectorPointer = record + sizeof (int) + sizeof (TombstoneByte);
+
+        for (int i = 0; i < originalBitVectorSize; i++) {
+            for (int bit = CHAR_BIT - 1; bit >= 0; --bit) {
+                isNull.push_back((((char*)bitVectorPointer)[i] & (1 << bit)) != 0);
+            }
+        }
+
+        int newBitVectorSize = getActualByteForNullsIndicator(attributeNames.size());
+        int total_size = newBitVectorSize;
+        for (auto attributeName : attributeNames) {
+            int i = attributePositions[attributeName];
+            total_size += recordDescriptor[i].length;
+            if (recordDescriptor[i].type == TypeVarChar)
+                total_size += sizeof (int);
+        }
+
+        char deserializedRecord [total_size];
+        char *deSerRecordPointer = deserializedRecord;
+        memset(deserializedRecord, 0, total_size);
+
+        char *bitvector;
+        processSelectedAttributes (attributeNames, attributePositions, bitvector, isNull);
+        memcpy(deSerRecordPointer, bitvector, newBitVectorSize);
+
+        deSerRecordPointer += newBitVectorSize;
+        OGRecordPointer += originalBitVectorSize;
+        char *OGRecordDataPointer = OGRecordPointer + (fieldCount * sizeof (OffsetLength));
+        char *OGRecordOffsetPointer = OGRecordPointer;
+
+        for (int i = 0; i < fieldCount; i++) {
+            if (isNull[i] || !validAttributesIndex[i]) {
+                //std::cout << i << std::endl;
+                OGRecordDataPointer = record + *(int*)OGRecordOffsetPointer;
+                OGRecordOffsetPointer += sizeof (OffsetLength);
+                if (isNull[i])
+                    total_size -= recordDescriptor[i].length;
+
+                continue;
+            }
+            if (recordDescriptor[i].type == 0) {
+                int int_data;
+                memcpy(&int_data, OGRecordDataPointer, sizeof (int));
+                OGRecordDataPointer += sizeof (int);
+
+                memcpy((int*)deSerRecordPointer, &int_data, sizeof (int));
+                deSerRecordPointer += sizeof (int);
+
+                OGRecordOffsetPointer += sizeof (OffsetLength) ;
+            }
+            else if (recordDescriptor[i].type == 1) {
+                float float_data;
+                memcpy(&float_data, OGRecordDataPointer, sizeof (float));
+                OGRecordDataPointer += sizeof (float);
+
+                memcpy((int*)deSerRecordPointer, &float_data, sizeof (float));
+                deSerRecordPointer += sizeof (float);
+
+                OGRecordOffsetPointer += sizeof (OffsetLength) ;
+            }
+            else if (recordDescriptor[i].type == 2) {
+                total_size -= recordDescriptor[i].length;
+                int length_of_string = record + *(int*)OGRecordOffsetPointer - OGRecordDataPointer;
+                memcpy((int*)deSerRecordPointer, &length_of_string, sizeof (int));
+                deSerRecordPointer += 4;
+
+                total_size += length_of_string;
+                memcpy(deSerRecordPointer, OGRecordDataPointer, length_of_string);
+                deSerRecordPointer += length_of_string;
+                OGRecordDataPointer += length_of_string;
+                OGRecordOffsetPointer += sizeof (OffsetLength);
+            }
+        }
+        memcpy(data, deserializedRecord , total_size);
+        return 0;
+    }
+    RC checkTombstone (char *record) {
+        char tombstoneByte;
+        memcpy(&tombstoneByte, record, 1);
+        return tombstoneByte;
+    }
+
+    RC RBFM_ScanIterator::getNextRecord(RID &rid, void *&data) {
+        //TODO: test for empty strings
+        int reqSatisfied = 0;
+        while (!reqSatisfied){
+            if (currentPage == fileHandle.getNumberOfPages())
+                return RBFM_EOF;
+
+            char page [PAGE_SIZE];
+            fileHandle.readPage(currentPage, page);
+            int freeSpace = 0;
+            int numSlots = 0;
+            getOrSetFreeSpace(page, freeSpace, 0);
+            getOrSetNumSlots(page, numSlots, 0);
+
+            if (slotNum == numSlots) {
+                currentPage ++;
+                continue;
+            }
+
+            RID ridCheck;
+            ridCheck.pageNum = currentPage;
+            ridCheck.slotNum = slotNum;
+
+            char *record = nullptr;
+            readStoredRecord (ridCheck, record, page);
+            if (checkTombstone(record)) {
+                free(record);
+                slotNum++;
+                continue;
+            }
+
+            //check attribute first if there is some condition
+            if (compOp != NO_OP) {
+                char *attributeValue;
+                int numFields = *(int*)(record + sizeof (TombstoneByte));
+                if (readSingleAttribute(record, attributeValue,
+                                        attributePositions[conditionAttribute],
+                                        compValType,
+                                        numFields)) {
+                    free(record);
+                    free(attributeValue);
+                    slotNum ++;
+                    continue;
+                }
+
+                if (0 != compareAttributes(attributeValue, value, compOp,compValType)) {
+                    //checking if the selected attribute is NULL or not satisfying the condition
+                    free(record);
+                    free(attributeValue);
+                    slotNum ++;
+                    continue;
+                }
+            }
+
+            //after confirming that condition is satisfied, build the record to be returned
+            buildSelectedAttributesRecord (record, recordDescriptor, attributeNames, data, attributePositions);
+            rid.pageNum = ridCheck.pageNum;
+            rid.slotNum = ridCheck.slotNum;
+
+            reqSatisfied = 1;
+            slotNum ++;
+        }
+        return 0;
     }
 
 } // namespace PeterDB

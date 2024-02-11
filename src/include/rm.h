@@ -18,7 +18,7 @@ namespace PeterDB {
 
         // "data" follows the same format as RelationManager::insertTuple()
         RC getNextTuple(RID &rid, void *data);
-
+        PeterDB::RBFM_ScanIterator RBFM_Scan_Iterator;
         RC close();
     };
 

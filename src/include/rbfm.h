@@ -1,5 +1,6 @@
 #ifndef _rbfm_h_
 #define _rbfm_h_
+#include "iostream"
 
 #include <vector>
 
@@ -61,9 +62,20 @@ namespace PeterDB {
         // Never keep the results in the memory. When getNextRecord() is called,
         // a satisfying record needs to be fetched from the file.
         // "data" follows the same format as RecordBasedFileManager::insertRecord().
-        RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
+        RC getNextRecord(RID &rid, void *&data);
 
         RC close() { return -1; };
+
+        FileHandle fileHandle;
+        std::vector<Attribute> recordDescriptor;
+        std::string conditionAttribute;
+        CompOp compOp;                  // comparison type such as "<" and "="
+        char *value;                    // used in the comparison
+        AttrType compValType;
+        std::vector<std::string> attributeNames;
+        unsigned currentPage;
+        unsigned slotNum;
+        std::unordered_map<std::string, int> attributePositions;
     };
 
     class RecordBasedFileManager {
