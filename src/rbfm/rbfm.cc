@@ -997,8 +997,10 @@ namespace PeterDB {
         }
         std::bitset<8> Bitset;
         memcpy(&Bitset, result, 1);
+        // free(result);
         //std::cout << isNull[1] << " "<<Bitset << std::endl;
     }
+
     RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&recordDescriptor,
                                       const std::vector<std::string>&attributeNames,
                                       void *&data, std::unordered_map<std::string, int> &attributePositions) {
@@ -1037,6 +1039,7 @@ namespace PeterDB {
         char *bitvector;
         processSelectedAttributes (attributeNames, attributePositions, bitvector, isNull);
         memcpy(deSerRecordPointer, bitvector, newBitVectorSize);
+        free(bitvector);
 
         deSerRecordPointer += newBitVectorSize;
         OGRecordPointer += originalBitVectorSize;
@@ -1089,6 +1092,7 @@ namespace PeterDB {
         memcpy(data, deserializedRecord , total_size);
         return 0;
     }
+    
     RC checkTombstone (char *record) {
         char tombstoneByte;
         memcpy(&tombstoneByte, record, 1);
@@ -1104,11 +1108,11 @@ namespace PeterDB {
         char *record = nullptr;
         readStoredRecord (rid, record, page);
         int numFields = *(int*)(record + sizeof (TombstoneByte));
-        std::cout << "First field " << *(int*) (record + sizeof (TombstoneByte) + sizeof (int) + 1);
+        // std::cout << "First field " << *(int*) (record + sizeof (TombstoneByte) + sizeof (int) + 1);
         std::bitset<8> testing;
         memcpy(&testing, (char*)record + sizeof (TombstoneByte) + sizeof (int), 1);
-        std::cout << "Num Fields " << numFields << std::endl;
-        std::cout << testing << std::endl;
+        // std::cout << "Num Fields " << numFields << std::endl;
+        // std::cout << testing << std::endl;
         int position = 0;
         int i;
         for (i = 0; i < recordDescriptor.size(); i++) {
@@ -1118,11 +1122,11 @@ namespace PeterDB {
         position = i;
         AttrType type = recordDescriptor[position].type;
         std::bitset<8> Bitset ("00000000");
-        std::cout << "for position " << position << std::endl;
+        // std::cout << "for position " << position << std::endl;
 
         if (checkAttributeNull(record, position)) {
             Bitset.set(7);
-            std::cout << "after setting NULL Bit" << Bitset << std::endl;
+            // std::cout << "after setting NULL Bit" << Bitset << std::endl;
             memcpy(data, &Bitset, 1);
             return 0;
         }
@@ -1135,7 +1139,7 @@ namespace PeterDB {
             memcpy((char*)data + 1, &length, sizeof (int));
             memcpy((char*)data + 1 + sizeof (int), (char*)attributeValue + sizeof (int), length);
         } else {
-            std::cout << *(float*)attributeValue << std::endl;
+            // std::cout << *(float*)attributeValue << std::endl;
             memcpy((char*)data + 1, attributeValue, sizeof (int));
         }
         return 0;
@@ -1204,7 +1208,7 @@ namespace PeterDB {
             buildSelectedAttributesRecord (record, recordDescriptor, attributeNames, data, attributePositions);
             rid.pageNum = ridCheck.pageNum;
             rid.slotNum = ridCheck.slotNum;
-
+            free(record);
             reqSatisfied = 1;
             slotNum ++;
         }

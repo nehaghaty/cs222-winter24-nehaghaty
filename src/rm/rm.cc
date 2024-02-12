@@ -173,7 +173,6 @@ namespace PeterDB {
         RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, tablesBuffer, tablesRid);
         RID attrsRid;
         RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, attrsBuffer, attrsRid);
-
         free(tablesBuffer);
         free(attrsBuffer);
 
@@ -234,6 +233,7 @@ namespace PeterDB {
         free(positionRecBuf);
         RecordBasedFileManager::instance().closeFile(tablesFileHandle);
         RecordBasedFileManager::instance().closeFile(attrsFileHandle);
+        delete[] nullsIndicator;
         return 0;
     }
 
@@ -268,6 +268,7 @@ namespace PeterDB {
         }
 
         if(fileExists(tablesFileName) && fileExists(attrsFileName)){
+
             if(fileExists(tableName)){
                 std::cout<<"Table already exists"<<std::endl;
                 return -1;
@@ -298,6 +299,7 @@ namespace PeterDB {
             RecordBasedFileManager::instance().openFile(tablesFileName, tablesFileHandle);
             RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, tablesBuffer, newRid);
             RecordBasedFileManager::instance().closeFile(tablesFileHandle);
+            free(tablesBuffer);
             // prepare Attributes record
             int positionCounter = 0;
             for(auto attr: attrs){
@@ -310,11 +312,10 @@ namespace PeterDB {
                 RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrBuffer, newRid);
                 RecordBasedFileManager::instance().closeFile(attrsFileHandle);
                 positionCounter++;
-//                RecordBasedFileManager::instance().printRecord(attrsRecordDescriptor, attrBuffer, std::cout );
+                free(attrBuffer);
             }
+            delete[] nullsIndicator;
 
-//            RecordBasedFileManager::instance().printRecord(tablesRecordDescriptor, tablesBuffer, std::cout );
-//            RecordBasedFileManager::instance().printRecord(attrsRecordDescriptor, attrB, std::cout );
 
         }
         else{
@@ -366,7 +367,7 @@ namespace PeterDB {
         value = malloc(sizeof(int));
         memcpy(value, &id, sizeof(int));
         scan(attrsFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator2);
-
+        free(value);
 
         memset(outBuffer, 0, 1000);
 
@@ -378,6 +379,7 @@ namespace PeterDB {
             memset(outBuffer, 0, 1000);
         }
         RecordBasedFileManager::instance().destroyFile(tableName);
+        free(outBuffer);
         return 0;
     }
 
@@ -413,7 +415,6 @@ namespace PeterDB {
         value = malloc (sizeof (int));
         memcpy(value, &id, sizeof (int));
         scan(attrsFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator_attribute);
-
         memset(outBuffer, 0, 1000);
         while (rmScanIterator_attribute.getNextTuple(rid, outBuffer) != RBFM_EOF) {
             Attribute newAttr;
@@ -433,9 +434,8 @@ namespace PeterDB {
             attrs.push_back(newAttr);
             memset(outBuffer, 0, 1000);
         }
-
-//        std::cout << "ID of " << tableName << " is " << id << std::endl;
         free(outBuffer);
+        free(value);
         return 0;
     }
 
@@ -560,7 +560,6 @@ namespace PeterDB {
         }
 
         rbfm.scan(fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator.RBFM_Scan_Iterator);
-
         return 0;
     }
 
