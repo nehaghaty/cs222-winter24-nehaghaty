@@ -3,6 +3,8 @@
 #include <cstring>
 #include <sstream>
 #include <cmath>
+#include <bitset>
+#include <algorithm>
 
 // record constants
 typedef unsigned OffsetLength;

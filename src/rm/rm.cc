@@ -2,6 +2,9 @@
 #include <iostream>
 #include <cstring>
 #include <sys/stat.h>
+#include <cmath>
+
+#define CHAR_BIT    8
 
 namespace PeterDB {
     RelationManager &RelationManager::instance() {

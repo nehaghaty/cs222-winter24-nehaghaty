@@ -1,7 +1,7 @@
 #ifndef _rbfm_h_
 #define _rbfm_h_
 #include "iostream"
-
+#include <unordered_map>
 #include <vector>
 
 #include "pfm.h"
