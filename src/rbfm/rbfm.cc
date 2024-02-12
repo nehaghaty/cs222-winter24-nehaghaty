@@ -753,7 +753,9 @@ namespace PeterDB {
                 int startingOffset = oldRecordOffset + oldRecordLength;
                 int endingOffset = NUM_SLOTS_OFFSET - (numSlots * SLOT_SIZE) - freeBytes;
                 int sizeToShift = endingOffset - startingOffset;
-                memmove(pageData + oldRecordOffset + updatedRecordLength, pageData + startingOffset, sizeToShift);
+                if(sizeToShift > 0){
+                    memmove(pageData + oldRecordOffset + updatedRecordLength, pageData + startingOffset, sizeToShift);
+                }
                 //copy updated record
                 memcpy(pageData+oldRecordOffset, updatedRecord, updatedRecordLength);
                 //update slots after updated record slot

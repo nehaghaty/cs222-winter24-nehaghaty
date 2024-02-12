@@ -268,7 +268,10 @@ namespace PeterDB {
         }
 
         if(fileExists(tablesFileName) && fileExists(attrsFileName)){
-
+            if(fileExists(tableName)){
+                std::cout<<"Table already exists"<<std::endl;
+                return -1;
+            }
 
             //create a file for the table
             RecordBasedFileManager::instance().createFile(tableName);
