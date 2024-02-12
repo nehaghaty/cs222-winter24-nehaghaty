@@ -409,7 +409,7 @@ namespace PeterDB {
 
         //get the attributes from the columns table using the id
         conditionAttribute = "table-id";
-        attributeNames = {"column-name", "column-type"};
+        attributeNames = {"column-name", "column-type", "column-length"};
         value = malloc (sizeof (int));
         memcpy(value, &id, sizeof (int));
         scan(attrsFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator_attribute);
@@ -427,7 +427,9 @@ namespace PeterDB {
             newAttr.type = static_cast<PeterDB::AttrType>(type);
             //std::cout << "In setting " << type << std::endl;
 
-            newAttr.length = (type == PeterDB::TypeVarChar)? 50: 4;
+            int column_length = *(int*) ((char*)outBuffer + 1 + sizeof (int) + length + sizeof (int));
+            newAttr.length = column_length;
+            // std:: cout << "Column size " << column_length << std::endl;
             attrs.push_back(newAttr);
             memset(outBuffer, 0, 1000);
         }
@@ -502,7 +504,12 @@ namespace PeterDB {
         std::vector<PeterDB::Attribute > attrs;
         FileHandle fileHandle;
 
-        getAttributes(tableName, attrs);
+         if(tableName == tablesFileName)
+            attrs = tablesRecordDescriptor;
+        else if (tableName == attrsFileName)
+            attrs = attrsRecordDescriptor;
+        else
+            getAttributes(tableName, attrs);
         if(rbfm.openFile(tableName.c_str(), fileHandle)) return -1;
         if(rbfm.readRecord(fileHandle, attrs, rid, data)) return -1;
         rbfm.closeFile(fileHandle);
@@ -518,7 +525,13 @@ namespace PeterDB {
 
     RC RelationManager::readAttribute(const std::string &tableName, const RID &rid, const std::string &attributeName,
                                       void *data) {
-        return -1;
+        std::vector<Attribute > recordDescriptor;
+        getAttributes(tableName, recordDescriptor);
+        FileHandle fileHandle;
+        RecordBasedFileManager::instance().openFile(tableName, fileHandle);
+        RecordBasedFileManager::instance().readAttribute(fileHandle, recordDescriptor, rid, attributeName, data);
+        RecordBasedFileManager::instance().closeFile(fileHandle);
+        return 0;
     }
 
     RC RelationManager::scan(const std::string &tableName,
@@ -543,6 +556,7 @@ namespace PeterDB {
         else {
             if (getAttributes(tableName, recordDescriptor))
                 return -1;
+            rbfm.openFile(tableName, fileHandle);
         }
 
         rbfm.scan(fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator.RBFM_Scan_Iterator);

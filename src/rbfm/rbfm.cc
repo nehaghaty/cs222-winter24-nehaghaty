@@ -835,11 +835,6 @@ namespace PeterDB {
         return 0;
     }
 
-    RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
-                                             const RID &rid, const std::string &attributeName, void *data) {
-        return -1;
-    }
-
     RC RecordBasedFileManager::scan(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
                                     const std::string &conditionAttribute, const CompOp compOp, const void *value,
                                     const std::vector<std::string> &attributeNames,
@@ -877,7 +872,7 @@ namespace PeterDB {
         return 0;
     }
 
-    RC readStoredRecord (RID &rid, char *&record, char *page) {
+    RC readStoredRecord (const RID &rid, char *&record, char *page) {
         char *slotPointer = page + PAGE_SIZE - 1 - (NUM_SLOTS_BYTES + FREE_SPACE_BYTES);
         char *slotRequired = slotPointer - ((rid.slotNum + 1) * SLOT_SIZE);
 
@@ -897,7 +892,7 @@ namespace PeterDB {
         std::bitset<8> Bitset;
         memcpy(&Bitset, record + sizeof (int) + sizeof (TombstoneByte) + bitsetPosition, 1);
 //        std::cout << Bitset << std::endl;
-        return (Bitset.test(position % CHAR_BIT));
+        return (Bitset.test(7 - (position % CHAR_BIT)));
     }
     RC readSingleAttribute (char *record, char *&attributeValue, int position, AttrType type, int numFields) {
         int bitVectorSize = getActualByteForNullsIndicator (numFields);
@@ -1100,6 +1095,52 @@ namespace PeterDB {
         return tombstoneByte;
     }
 
+    RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
+                                             const RID &rid, const std::string &attributeName, void *data) {
+        char *attributeValue;
+        char page [PAGE_SIZE];
+        fileHandle.readPage(rid.pageNum, page);
+
+        char *record = nullptr;
+        readStoredRecord (rid, record, page);
+        int numFields = *(int*)(record + sizeof (TombstoneByte));
+        std::cout << "First field " << *(int*) (record + sizeof (TombstoneByte) + sizeof (int) + 1);
+        std::bitset<8> testing;
+        memcpy(&testing, (char*)record + sizeof (TombstoneByte) + sizeof (int), 1);
+        std::cout << "Num Fields " << numFields << std::endl;
+        std::cout << testing << std::endl;
+        int position = 0;
+        int i;
+        for (i = 0; i < recordDescriptor.size(); i++) {
+            if (recordDescriptor[i].name == attributeName)
+                break;
+        }
+        position = i;
+        AttrType type = recordDescriptor[position].type;
+        std::bitset<8> Bitset ("00000000");
+        std::cout << "for position " << position << std::endl;
+
+        if (checkAttributeNull(record, position)) {
+            Bitset.set(7);
+            std::cout << "after setting NULL Bit" << Bitset << std::endl;
+            memcpy(data, &Bitset, 1);
+            return 0;
+        }
+
+        readSingleAttribute(record, attributeValue, position, type, numFields);
+
+        memcpy(data, &Bitset, 1);
+        if (type == TypeVarChar) {
+            int length = *(int*)attributeValue;
+            memcpy((char*)data + 1, &length, sizeof (int));
+            memcpy((char*)data + 1 + sizeof (int), (char*)attributeValue + sizeof (int), length);
+        } else {
+            std::cout << *(float*)attributeValue << std::endl;
+            memcpy((char*)data + 1, attributeValue, sizeof (int));
+        }
+        return 0;
+    }
+
     RC RBFM_ScanIterator::getNextRecord(RID &rid, void *&data) {
         //TODO: test for empty strings
         int reqSatisfied = 0;
@@ -1117,6 +1158,7 @@ namespace PeterDB {
 //            std::cout << "Number of slots " << numSlots << std::endl;
             if (slotNum == numSlots) {
                 currentPage ++;
+                slotNum = 0;
                 continue;
             }
 
@@ -1144,7 +1186,7 @@ namespace PeterDB {
                                         compValType,
                                         numFields)) {
                     free(record);
-                    free(attributeValue);
+                    // free(attributeValue);
                     slotNum ++;
                     continue;
                 }
@@ -1168,6 +1210,7 @@ namespace PeterDB {
         }
         return 0;
     }
+
 
 } // namespace PeterDB
 
