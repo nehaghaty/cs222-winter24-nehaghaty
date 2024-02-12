@@ -315,7 +315,11 @@ namespace PeterDBTesting {
     public:
         void checkCatalog(const std::string &expectedString) {
             memset(outBuffer, 0, bufSize);
+            std::cout << "curr page: " <<rmsi.RBFM_Scan_Iterator.currentPage << std::endl;
+            std::cout << "slot num:"<< rmsi.RBFM_Scan_Iterator.slotNum << std::endl;
+//            std::cout << "num slots: " << rmsi.RBFM_Scan_Iterator. << std::endl;
             ASSERT_NE(rmsi.getNextTuple(rid, outBuffer), RM_EOF) << "Scan should continue.";
+            std::cout << rmsi.RBFM_Scan_Iterator.currentPage << std::endl;
             std::stringstream stream;
             ASSERT_EQ(rm.printTuple(attrs, outBuffer, stream), success)
                                         << "RelationManager::printTuple() should succeed.";

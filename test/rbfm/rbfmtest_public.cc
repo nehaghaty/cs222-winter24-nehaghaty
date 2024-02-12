@@ -345,6 +345,11 @@ namespace PeterDBTesting {
         inBuffer = malloc(2000);
         outBuffer = malloc(2000);
 
+        std::string longerStr;
+        for (int i = 0; i < 1000; i++) {
+            longerStr.push_back('l');
+        }
+
         std::string longStr;
         for (int i = 0; i < 1000; i++) {
             longStr.push_back('a');
@@ -387,14 +392,42 @@ namespace PeterDBTesting {
         // read mid record and verify its content
         readRecord(recordDescriptor, midRID, midString);
 
-        // update short record
+        // update short record - will create tombstone
         updateRecord(recordDescriptor, shortRID, longStr);
 
         // read the short record and verify its content
         readRecord(recordDescriptor, shortRID, longStr);
 
+        //update short record again
+        updateRecord(recordDescriptor, shortRID, longerStr);
+
+        // read the short record and verify its content
+        readRecord(recordDescriptor, shortRID, longerStr);
+
+        insertRecord(recordDescriptor, rid, longStr);
+        insertRecord(recordDescriptor, rid, longStr);
+
+//        update short record again
+        updateRecord(recordDescriptor, shortRID, shortStr);
+//
+        readRecord(recordDescriptor, shortRID, shortStr);
+
+        updateRecord(recordDescriptor, shortRID, longerStr);
+//
+        readRecord(recordDescriptor, shortRID, longerStr);
+
         // delete the short record
         rbfm.deleteRecord(fileHandle, recordDescriptor, shortRID);
+
+        PeterDB::RID newRid;
+        newRid.pageNum = 0;
+        newRid.slotNum = 1;
+        rbfm.readRecord(fileHandle, recordDescriptor, newRid , outBuffer);
+        std::stringstream stream;
+        rbfm.printRecord(recordDescriptor, outBuffer, std::cout);
+
+//        readRecord(recordDescriptor, shortRID, longerStr);
+
 
         // verify the short record has been deleted
         ASSERT_NE(rbfm.readRecord(fileHandle, recordDescriptor, shortRID, outBuffer), success)
@@ -992,5 +1025,4 @@ namespace PeterDBTesting {
             ASSERT_EQ(memcmp(inBuffer, outBuffer, size), 0) << "Reading unmatched data.";
         }
     }
-
 }// namespace PeterDBTesting

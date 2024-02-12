@@ -1,6 +1,42 @@
 #include "test/utils/rm_test_util.h"
 
 namespace PeterDBTesting {
+
+    TEST_F(RM_Catalog_Test, create_and_delete_catalog_new) {
+
+        // Try to delete the System Catalog.
+        // If this is the first time, it will generate an error. It's OK and we will ignore that.
+        rm.deleteCatalog();
+
+        std::string tableName = "Tables";
+        std::string attrTableName = "Columns";
+        ASSERT_FALSE(fileExists(tableName)) << "Table " << tableName << " file should not exist now.";
+        ASSERT_FALSE(fileExists(attrTableName)) << "Table " << attrTableName << " file should not exist now.";
+
+        // Create Catalog
+        ASSERT_EQ(rm.createCatalog(), success) << "Creating the Catalog should succeed.";
+
+
+        ASSERT_TRUE(fileExists(tableName)) << "Table " << tableName << " file should exist now.";
+        ASSERT_TRUE(fileExists(attrTableName)) << "Table " << attrTableName << " file should exist now.";
+
+        std::vector<PeterDB::Attribute > attrs;
+        rm.getAttributes("Tables", attrs);
+        for (const auto& i: attrs) {
+            std::cout << i.name << std::endl;
+            std::cout << i.type << std::endl;
+            std::cout << i.length << std::endl;
+        }
+
+        // Delete Catalog
+        ASSERT_EQ(rm.deleteCatalog(), success) << "Deleting the Catalog should succeed.";
+
+        //ASSERT_FALSE(fileExists(tableName)) << "Table " << tableName << " file should not exist now.";
+        //ASSERT_FALSE(fileExists(attrTableName)) << "Table " << attrTableName << " file should not exist now.";
+
+    }
+
+
     TEST_F(RM_Catalog_Test, create_and_delete_tables) {
 
         // Try to delete the System Catalog.
@@ -1328,7 +1364,7 @@ namespace PeterDBTesting {
 
     TEST_F(RM_Catalog_Scan_Test_2, try_to_modify_catalog) {
         // Functions tested
-        // An attempt to modify System Catalogs tables - should no succeed
+        // An attempt to modify System Catalogs tables - should not succeed
 
         bufSize = 1000;
         inBuffer = malloc(bufSize);
@@ -1507,7 +1543,7 @@ namespace PeterDBTesting {
 
         // Add the Attribute back
         PeterDB::Attribute attr = attrs[3];
-        ASSERT_EQ(rm.addAttribute(tableName, attr), success) << "RelationManager::addAttribute() should succeed.";
+        ASSERT_EQ(rm.addAttribute(tableName, attr), success) << "RelationManager::addAttributes() should succeed.";
 
         // Drop another attribute
         ASSERT_EQ(rm.dropAttribute(tableName, "age"), success) << "RelationManager::dropAttribute() should succeed.";
@@ -1564,7 +1600,7 @@ namespace PeterDBTesting {
 
         // Add the Attribute back
         PeterDB::Attribute attr = attrs[3];
-        ASSERT_EQ(rm.addAttribute(tableName, attr), success) << "RelationManager::addAttribute() should succeed.";
+        ASSERT_EQ(rm.addAttribute(tableName, attr), success) << "RelationManager::addAttributes() should succeed.";
 
         // Get the attribute from the table again
         std::vector<PeterDB::Attribute> attrs2;
@@ -1691,7 +1727,7 @@ namespace PeterDBTesting {
         PeterDB::Attribute attr{
                 "ssn", PeterDB::TypeInt, 4
         };
-        ASSERT_EQ(rm.addAttribute(tableName, attr), success) << "RelationManager::addAttribute() should succeed.";
+        ASSERT_EQ(rm.addAttribute(tableName, attr), success) << "RelationManager::addAttributes() should succeed.";
 
 
         // GetAttributes again
