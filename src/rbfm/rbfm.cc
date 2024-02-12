@@ -522,6 +522,7 @@ namespace PeterDB {
                 *(short*)slotPointer -= recordLength;
             }
 
+            //std::cout << *(short*)slotPointer << std::endl;
             slotPointer -= SLOT_SIZE;
         }
 
@@ -874,9 +875,12 @@ namespace PeterDB {
 
     RC readStoredRecord (RID &rid, char *&record, char *page) {
         char *slotPointer = page + PAGE_SIZE - 1 - (NUM_SLOTS_BYTES + FREE_SPACE_BYTES);
-        char *slotRequired = slotPointer - (rid.slotNum + 1) * SLOT_SIZE;
+        char *slotRequired = slotPointer - ((rid.slotNum + 1) * SLOT_SIZE);
 
         int offset = *(short*)slotRequired;
+        if (offset == -1)
+            return -1;
+
         int length = *((short*)(slotRequired + sizeof (SlotSubFieldLength)));
 
         record = (char*) malloc(length);
@@ -1106,6 +1110,7 @@ namespace PeterDB {
             getOrSetFreeSpace(page, freeSpace, 0);
             getOrSetNumSlots(page, numSlots, 0);
 
+//            std::cout << "Number of slots " << numSlots << std::endl;
             if (slotNum == numSlots) {
                 currentPage ++;
                 continue;
@@ -1116,7 +1121,10 @@ namespace PeterDB {
             ridCheck.slotNum = slotNum;
 
             char *record = nullptr;
-            readStoredRecord (ridCheck, record, page);
+            if (readStoredRecord (ridCheck, record, page)) {
+                slotNum++;
+                continue;
+            }
             if (checkTombstone(record)) {
                 free(record);
                 slotNum++;

@@ -36,31 +36,6 @@ namespace PeterDBTesting {
 
     }
 
-//    TEST_F(RM_Catalog_Test, create_and_delete_catalog) {
-//
-//        // Try to delete the System Catalog.
-//        // If this is the first time, it will generate an error. It's OK and we will ignore that.
-//        rm.deleteCatalog();
-//
-//        std::string tableName = "Tables";
-//        std::string attrTableName = "Columns";
-//        ASSERT_FALSE(fileExists(tableName)) << "Table " << tableName << " file should not exist now.";
-//        ASSERT_FALSE(fileExists(attrTableName)) << "Table " << attrTableName << " file should not exist now.";
-//
-//        // Create Catalog
-//        ASSERT_EQ(rm.createCatalog(), success) << "Creating the Catalog should succeed.";
-//
-//        ASSERT_TRUE(fileExists(tableName)) << "Table " << tableName << " file should exist now.";
-//        ASSERT_TRUE(fileExists(attrTableName)) << "Table " << attrTableName << " file should exist now.";
-//
-//        // Delete Catalog
-//        ASSERT_EQ(rm.deleteCatalog(), success) << "Deleting the Catalog should succeed.";
-//
-//        ASSERT_FALSE(fileExists(tableName)) << "Table " << tableName << " file should not exist now.";
-//        ASSERT_FALSE(fileExists(attrTableName)) << "Table " << attrTableName << " file should not exist now.";
-//
-//
-//    }
 
     TEST_F(RM_Catalog_Test, create_and_delete_tables) {
 

@@ -24,7 +24,12 @@ namespace PeterDB {
     std::vector<PeterDB::Attribute> tablesRecordDescriptor;
     std::vector<PeterDB::Attribute> attrsRecordDescriptor;
 
-
+    bool canAccess(std::string tableName){
+        if(tableName == tablesFileName || tableName == attrsFileName){
+            return false;
+        }
+        return true;
+    }
 
     void addAttribute(std::vector<PeterDB::Attribute> &recordDescriptor,
                       const std::string &name,
@@ -38,16 +43,17 @@ namespace PeterDB {
     }
 
     void createTableRecordDescriptor(std::vector<PeterDB::Attribute> &recordDescriptor) {
-        addAttribute(recordDescriptor, "Id", PeterDB::TypeInt, 4);
-        addAttribute(recordDescriptor, "Name", PeterDB::TypeVarChar, 30);
-        addAttribute(recordDescriptor, "Filename", PeterDB::TypeVarChar, 30);
+        addAttribute(recordDescriptor, "table-id", PeterDB::TypeInt, 4);
+        addAttribute(recordDescriptor, "table-name", PeterDB::TypeVarChar, 50);
+        addAttribute(recordDescriptor, "file-name", PeterDB::TypeVarChar, 50);
     }
 
     void createAttrRecordDescriptor(std::vector<PeterDB::Attribute> &recordDescriptor) {
-        addAttribute(recordDescriptor, "Table_id", PeterDB::TypeInt, 4);
-        addAttribute(recordDescriptor, "Attribute_name", PeterDB::TypeVarChar, 30);
-        addAttribute(recordDescriptor, "Type", PeterDB::TypeInt, 4);
-        addAttribute(recordDescriptor, "Position", PeterDB::TypeInt, 4);
+        addAttribute(recordDescriptor, "table-id", PeterDB::TypeInt, 4);
+        addAttribute(recordDescriptor, "column-name", PeterDB::TypeVarChar, 50);
+        addAttribute(recordDescriptor, "column-type", PeterDB::TypeInt, 4);
+        addAttribute(recordDescriptor, "column-length", PeterDB::TypeInt, 4);
+        addAttribute(recordDescriptor, "column-position", PeterDB::TypeInt, 4);
     }
 
     static unsigned char *initializeNullFieldsIndicator(const std::vector<PeterDB::Attribute> &recordDescriptor) {
@@ -57,7 +63,6 @@ namespace PeterDB {
         return indicator;
     }
 
-
     static void prepareTablesRecord(size_t fieldCount,
                                     unsigned char *nullFieldsIndicator,
                                     const int id,
@@ -65,8 +70,7 @@ namespace PeterDB {
                                     const std::string &name,
                                     const int fileNameLength,
                                     const std::string &fileName,
-                                    void *buffer,
-                                    size_t &recordSize) {
+                                    void *buffer) {
         int offset = 0;
 
         // Null-indicators
@@ -92,8 +96,6 @@ namespace PeterDB {
         offset += sizeof(int);
         memcpy((char *) buffer + offset, fileName.c_str(), fileNameLength);
         offset += fileNameLength;
-
-        recordSize = offset;
     }
 
     static void prepareAttrsRecord(size_t fieldCount,
@@ -102,9 +104,9 @@ namespace PeterDB {
                                    const int attrNameLength,
                                    const std::string &attrName,
                                    const int attrType,
+                                   const int attrLen,
                                    const int position,
-                                   void *buffer,
-                                   size_t &recordSize) {
+                                   void *buffer) {
         int offset = 0;
         //std::cout << attrName << " " << attrType << std::endl;
         // Null-indicators
@@ -130,11 +132,14 @@ namespace PeterDB {
         //std::cout << "After adding type " << *(int*)((char*)buffer + offset) << std::endl;
         offset += sizeof(int);
 
+        // attribute length field
+        memcpy((char *) buffer + offset, &attrLen, sizeof(int));
+        //std::cout << "After adding type " << *(int*)((char*)buffer + offset) << std::endl;
+        offset += sizeof(int);
+
         // position field
         memcpy((char *) buffer + offset, &position, sizeof(int));
         offset += sizeof(int);
-
-        recordSize = offset;
     }
 
     RC RelationManager::createCatalog() {
@@ -153,21 +158,18 @@ namespace PeterDB {
         *********************/
 //         prepare records
         unsigned char *nullsIndicator = initializeNullFieldsIndicator(tablesRecordDescriptor);
-        size_t tableRecordSize = 0;
-        size_t attrRecordSize = 0;
         void* tablesBuffer = malloc(100);
         void* attrsBuffer = malloc(100);
-        prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, 0, 6,
-                            "Tables", 6, tablesFileName, tablesBuffer, tableRecordSize);
-        prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, 1, 7,
-                            "Columns", 7, attrsFileName, attrsBuffer, attrRecordSize);
+        prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, 0, tablesFileName.length(),
+                            tablesFileName, tablesFileName.length(), tablesFileName, tablesBuffer);
+        prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, 1, attrsFileName.length(),
+                            attrsFileName, attrsFileName.length(), attrsFileName, attrsBuffer);
 
 //         insert records
         RID tablesRid;
         RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, tablesBuffer, tablesRid);
         RID attrsRid;
         RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, attrsBuffer, attrsRid);
-        FileHandle fileHandle = tablesFileHandle;
 
         free(tablesBuffer);
         free(attrsBuffer);
@@ -177,14 +179,11 @@ namespace PeterDB {
         *********************/
         // prepare Tables records
         void* idRecBuf = malloc(100);
-        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 0, 2, "Id", PeterDB::TypeInt, 0, idRecBuf,
-                           tableRecordSize);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 0, 8, "table-id", PeterDB::TypeInt,4, 1, idRecBuf);
         void* nameRecBuf = malloc(100);
-        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 0, 4, "Name", PeterDB::TypeVarChar, 1, nameRecBuf,
-                           tableRecordSize);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 0, 10, "table-name", PeterDB::TypeVarChar,50, 2, nameRecBuf);
         void* filenameRecBuf = malloc(100);
-        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 0, 8, "Filename", PeterDB::TypeVarChar, 2, filenameRecBuf,
-                           tableRecordSize);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 0, 9, "file-name", PeterDB::TypeVarChar, 50, 3, filenameRecBuf);
         //std::cout << "After preparing " << *((char*)filenameRecBuf + 16) << std::endl;
 
 
@@ -203,18 +202,15 @@ namespace PeterDB {
 
 //         prepare Attributes records
         void* tableIdRecBuf = malloc(100);
-//        std::cout << "Inserting attributes records " << std::endl;
-        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 1, 8,"Table_id", PeterDB::TypeInt, 0, tableIdRecBuf,
-                           tableRecordSize);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 1, 8,"table-id", PeterDB::TypeInt, 4, 1, tableIdRecBuf);
         void* attrNameRecBuf = malloc(100);
-        prepareAttrsRecord(tablesRecordDescriptor.size(), nullsIndicator, 1, 14, "Attribute_name", PeterDB::TypeVarChar, 1, attrNameRecBuf,
-                           tableRecordSize);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 1, 11, "column-name", PeterDB::TypeVarChar, 50, 2, attrNameRecBuf);
         void* attrTypeRecBuf = malloc(100);
-        prepareAttrsRecord(tablesRecordDescriptor.size(), nullsIndicator, 1, 4, "Type", PeterDB::TypeInt, 2, attrTypeRecBuf,
-                           tableRecordSize);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 1, 11, "column-type", PeterDB::TypeInt, 4, 3, attrTypeRecBuf);
+        void* attrLenRecBuf = malloc(100);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 1, 13, "column-length", PeterDB::TypeInt, 4, 4, attrLenRecBuf);
         void* positionRecBuf = malloc(100);
-        prepareAttrsRecord(tablesRecordDescriptor.size(), nullsIndicator, 1, 8, "Position", PeterDB::TypeInt, 3, positionRecBuf,
-                           tableRecordSize);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 1, 15, "column-position", PeterDB::TypeInt,4, 5, positionRecBuf);
 
         // insert Attributes records into Attributes table
         RID tableIdRid;
@@ -223,12 +219,15 @@ namespace PeterDB {
         RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrNameRecBuf, attrNameRid);
         RID attrTypeRid;
         RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrTypeRecBuf, attrTypeRid);
+        RID attrLenRid;
+        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrLenRecBuf, attrLenRid);
         RID posRid;
         RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, positionRecBuf, posRid);
 
         free(tableIdRecBuf);
         free(attrNameRecBuf);
         free(attrTypeRecBuf);
+        free(attrLenRecBuf);
         free(positionRecBuf);
         RecordBasedFileManager::instance().closeFile(tablesFileHandle);
         RecordBasedFileManager::instance().closeFile(attrsFileHandle);
@@ -249,17 +248,6 @@ namespace PeterDB {
             // delete Attributes file
             RecordBasedFileManager::instance().destroyFile(tablesFileName);
             RecordBasedFileManager::instance().destroyFile(attrsFileName);
-
-            // delete Attribute and Table entries from Tables table
-//            RID tablesRid;
-//            tablesRid.pageNum = 0;
-//            tablesRid.slotNum = 0;
-//            RecordBasedFileManager::instance().deleteRecord(tablesFileHandle, tablesRecordDescriptor, tablesRid);
-//
-//            RID attrsRid;
-//            attrsRid.pageNum = 0;
-//            attrsRid.slotNum = 1;
-//            RecordBasedFileManager::instance().deleteRecord(attrsFileHandle, attrsRecordDescriptor, attrsRid);
         }
 
         else{
@@ -272,7 +260,12 @@ namespace PeterDB {
 
     RC RelationManager::createTable(const std::string &tableName, const std::vector<Attribute> &attrs) {
         // check if catalog exists
+        if(!canAccess(tableName)) {
+            return -1;
+        }
+
         if(fileExists(tablesFileName) && fileExists(attrsFileName)){
+
 
             //create a file for the table
             RecordBasedFileManager::instance().createFile(tableName);
@@ -282,52 +275,64 @@ namespace PeterDB {
             // prepare Tables record
             void *outBuffer = malloc(1000);
             RM_ScanIterator rmsi;
-            std::vector<std::string> attributeNames {"Id"};
-            scan("Tables","", PeterDB::NO_OP, nullptr, attributeNames, rmsi);
+            std::vector<std::string> attributeNames {"table-id"};
+            scan(tablesFileName,"", PeterDB::NO_OP, nullptr, attributeNames, rmsi);
             memset(outBuffer, 0, 1000);
             RID rid;
-            int idCounter =0;
+            int idCounter = 0;
             while (rmsi.getNextTuple(rid, outBuffer) != RBFM_EOF) {
                 idCounter++;
             }
-            void* buffer = malloc(100);
+            void* tablesBuffer = malloc(100);
             RID newRid;
             prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, idCounter,
                                 tableName.length(), tableName, tableName.length(),
-                                tableName, buffer);
+                                tableName, tablesBuffer);
             // insert record into Tables table
-            insertTuple(tablesFileName, buffer,newRid);
-
-
+            RecordBasedFileManager::instance().openFile(tablesFileName, tablesFileHandle);
+            RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, tablesBuffer, newRid);
+            RecordBasedFileManager::instance().closeFile(tablesFileHandle);
             // prepare Attributes record
             int positionCounter = 0;
             for(auto attr: attrs){
                 void* attrBuffer = malloc(1000);
                 prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator,
-               idCounter, attr.length, attr.name, attr.type,
-               positionCounter, attrBuffer);
+                                   idCounter, attr.name.length(), attr.name, attr.type, attr.length,
+                                   positionCounter, attrBuffer);
 
-                insertTuple(attrsFileName, attrBuffer,newRid);
+                RecordBasedFileManager::instance().openFile(attrsFileName, attrsFileHandle);
+                RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrBuffer, newRid);
+                RecordBasedFileManager::instance().closeFile(attrsFileHandle);
                 positionCounter++;
+//                RecordBasedFileManager::instance().printRecord(attrsRecordDescriptor, attrBuffer, std::cout );
             }
+
+//            RecordBasedFileManager::instance().printRecord(tablesRecordDescriptor, tablesBuffer, std::cout );
+//            RecordBasedFileManager::instance().printRecord(attrsRecordDescriptor, attrB, std::cout );
+
         }
         else{
             std::cout<<"Catalog does not exist, cannot create table"<<std::endl;
             return -1;
         }
-
+        return 0;
     }
 
+
     RC RelationManager::deleteTable(const std::string &tableName) {
+        if(!canAccess(tableName)) {
+            return -1;
+        }
+
         // delete file
-        RecordBasedFileManager::instance().destroyFile(tableName);
         // delete record
 
+
         //get the id of the table name from Tables
-        std::string conditionAttribute = "Name";
+        std::string conditionAttribute = "table-name";
         PeterDB::CompOp compOp = PeterDB::EQ_OP;
-        std::vector<std::string> attributeNames{"Id"};
-        RM_ScanIterator rmScanIterator;
+        std::vector<std::string> attributeNames{"table-id"};
+        RM_ScanIterator rmScanIterator1, rmScanIterator2;
         int id;
         RID rid;
 
@@ -335,35 +340,47 @@ namespace PeterDB {
         int tableNameLength = tableName.length();
         memcpy(value, &tableNameLength, sizeof(int));
         memcpy((char *) value + sizeof(int), tableName.c_str(), tableName.length());
-        scan("Tables", conditionAttribute, compOp, value, attributeNames, rmScanIterator);
+        scan(tablesFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator1);
         free(value);
 
+
         void *outBuffer = malloc(1000);
-        rmScanIterator.getNextTuple(rid, outBuffer);
-        deleteTuple(tablesFileName, rid);
+        if (rmScanIterator1.getNextTuple(rid, outBuffer) == RBFM_EOF)
+            return -1;
+
+        RecordBasedFileManager::instance().openFile(tablesFileName, tablesFileHandle);
+        RecordBasedFileManager::instance().deleteRecord(tablesFileHandle, tablesRecordDescriptor, rid);
+        RecordBasedFileManager::instance().closeFile(tablesFileHandle);
         memcpy(&id, (char *) outBuffer + 1, sizeof(int));
 
+
         //get the attributes from the columns table using the id
-        conditionAttribute = "Table_id";
-        attributeNames = {"Attribute_name", "Type"};
+        conditionAttribute = "table-id";
+        attributeNames = {"column-name", "column-type"};
         value = malloc(sizeof(int));
         memcpy(value, &id, sizeof(int));
-        scan("Columns", conditionAttribute, compOp, value, attributeNames, rmScanIterator);
+        scan(attrsFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator2);
+
 
         memset(outBuffer, 0, 1000);
 
-        while (rmScanIterator.getNextTuple(rid, outBuffer) != RBFM_EOF) {
-            deleteTuple(attrsFileName, rid);
+
+        while (rmScanIterator2.getNextTuple(rid, outBuffer) != RBFM_EOF) {
+            RecordBasedFileManager::instance().openFile(attrsFileName, attrsFileHandle);
+            RecordBasedFileManager::instance().deleteRecord(attrsFileHandle, attrsRecordDescriptor, rid);
+            RecordBasedFileManager::instance().closeFile(attrsFileHandle);
             memset(outBuffer, 0, 1000);
         }
+        RecordBasedFileManager::instance().destroyFile(tableName);
         return 0;
     }
 
+
     RC RelationManager::getAttributes(const std::string &tableName, std::vector<Attribute> &attrs) {
 
-        std::string conditionAttribute = "Name";
+        std::string conditionAttribute = "table-name";
         PeterDB::CompOp compOp = PeterDB::EQ_OP;
-        std::vector<std::string> attributeNames {"Id"};
+        std::vector<std::string> attributeNames {"table-id"};
         RM_ScanIterator rmScanIterator_table, rmScanIterator_attribute;
         int id;
         RID rid;
@@ -373,19 +390,23 @@ namespace PeterDB {
         int tableNameLength = tableName.length();
         memcpy(value, &tableNameLength, sizeof (int));
         memcpy((char*)value + sizeof (int), tableName.c_str(), tableName.length());
-        scan("Tables", conditionAttribute, compOp, value, attributeNames, rmScanIterator_table);
+        scan(tablesFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator_table);
         free(value);
 
         void *outBuffer = malloc(1000);
-        rmScanIterator_table.getNextTuple(rid, outBuffer);
+        if (rmScanIterator_table.getNextTuple(rid, outBuffer) == RBFM_EOF ) {
+            free(outBuffer);
+            return -1;
+        }
+
         memcpy(&id, (char*)outBuffer + 1, sizeof (int));
 
         //get the attributes from the columns table using the id
-        conditionAttribute = "Table_id";
-        attributeNames = {"Attribute_name", "Type"};
+        conditionAttribute = "table-id";
+        attributeNames = {"column-name", "column-type"};
         value = malloc (sizeof (int));
         memcpy(value, &id, sizeof (int));
-        scan("Columns", conditionAttribute, compOp, value, attributeNames, rmScanIterator_attribute);
+        scan(attrsFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator_attribute);
 
         memset(outBuffer, 0, 1000);
         while (rmScanIterator_attribute.getNextTuple(rid, outBuffer) != RBFM_EOF) {
@@ -400,7 +421,7 @@ namespace PeterDB {
             newAttr.type = static_cast<PeterDB::AttrType>(type);
             //std::cout << "In setting " << type << std::endl;
 
-            newAttr.length = (type == PeterDB::TypeVarChar)? 30: 4;
+            newAttr.length = (type == PeterDB::TypeVarChar)? 50: 4;
             attrs.push_back(newAttr);
             memset(outBuffer, 0, 1000);
         }
@@ -411,25 +432,45 @@ namespace PeterDB {
     }
 
     RC RelationManager::insertTuple(const std::string &tableName, const void *data, RID &rid) {
+        if(!canAccess(tableName)) {
+            return -1;
+        }
+
         RecordBasedFileManager &rbfm = RecordBasedFileManager::instance();
 
         std::vector<PeterDB::Attribute > attrs;
         FileHandle fileHandle;
 
-        getAttributes(tableName, attrs);
-        rbfm.openFile(tableName, fileHandle);
+        if(tableName == tablesFileName)
+            attrs = tablesRecordDescriptor;
+        else if (tableName == attrsFileName)
+            attrs = attrsRecordDescriptor;
+        else
+            getAttributes(tableName, attrs);
+
+        if(rbfm.openFile(tableName, fileHandle)) return -1;
         rbfm.insertRecord(fileHandle, attrs, data, rid);
         rbfm.closeFile(fileHandle);
         return 0;
     }
 
     RC RelationManager::deleteTuple(const std::string &tableName, const RID &rid) {
+
+        if(!canAccess(tableName)) {
+            return -1;
+        }
         RecordBasedFileManager &rbfm = RecordBasedFileManager::instance();
 
         std::vector<PeterDB::Attribute > attrs;
         FileHandle fileHandle;
 
-        getAttributes(tableName, attrs);
+        if(tableName == tablesFileName)
+            attrs = tablesRecordDescriptor;
+        else if (tableName == attrsFileName)
+            attrs = attrsRecordDescriptor;
+        else
+            getAttributes(tableName, attrs);
+
         rbfm.openFile(tableName, fileHandle);
         rbfm.deleteRecord(fileHandle, attrs, rid);
         rbfm.closeFile(fileHandle);
@@ -456,14 +497,13 @@ namespace PeterDB {
         FileHandle fileHandle;
 
         getAttributes(tableName, attrs);
-        rbfm.openFile(tableName, fileHandle);
-        rbfm.readRecord(fileHandle, attrs, rid, data);
+        if(rbfm.openFile(tableName.c_str(), fileHandle)) return -1;
+        if(rbfm.readRecord(fileHandle, attrs, rid, data)) return -1;
         rbfm.closeFile(fileHandle);
         return 0;
     }
 
     RC RelationManager::printTuple(const std::vector<Attribute> &attrs, const void *data, std::ostream &out) {
-
         RecordBasedFileManager &rbfm = RecordBasedFileManager::instance();
 
         rbfm.printRecord(attrs, data, out);
@@ -486,16 +526,15 @@ namespace PeterDB {
         FileHandle fileHandle;
         std::vector<Attribute> recordDescriptor;
 
-        if (tableName == "Tables") {
+        if (tableName == tablesFileName) {
             createTableRecordDescriptor(recordDescriptor);
-            rbfm.openFile("Tables", fileHandle);
+            rbfm.openFile(tablesFileName, fileHandle);
         }
-        else if (tableName == "Columns") {
+        else if (tableName == attrsFileName) {
             createAttrRecordDescriptor(recordDescriptor);
-            rbfm.openFile("Columns", fileHandle);
+            rbfm.openFile(attrsFileName, fileHandle);
         }
         else {
-
             if (getAttributes(tableName, recordDescriptor))
                 return -1;
         }
@@ -510,10 +549,14 @@ namespace PeterDB {
     RM_ScanIterator::~RM_ScanIterator() = default;
 
     RC RM_ScanIterator::getNextTuple(RID &rid, void *data) {
-        return RBFM_Scan_Iterator.getNextRecord(rid, data);
+        int retVal = RBFM_Scan_Iterator.getNextRecord(rid, data);
+        if(retVal){
+            return RM_EOF;
+        }
+        return 0;
     }
 
-    RC RM_ScanIterator::close() { return -1; }
+    RC RM_ScanIterator::close() { return 0; }
 
     // Extra credit work
     RC RelationManager::dropAttribute(const std::string &tableName, const std::string &attributeName) {
