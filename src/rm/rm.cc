@@ -287,9 +287,13 @@ namespace PeterDB {
             memset(outBuffer, 0, 1000);
             RID rid;
             int idCounter = 0;
+            std::cout<<"createTable b4 getnexttuple"<<std::endl;
             while (rmsi.getNextTuple(rid, outBuffer) != RBFM_EOF) {
                 idCounter++;
             }
+            // rmsi.close();
+            std::cout<<"createTable after getnexttuple"<<std::endl;
+            std::cout<< "id counter" << idCounter << std::endl;
             void* tablesBuffer = malloc(100);
             RID newRid;
             prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, idCounter,
@@ -352,8 +356,13 @@ namespace PeterDB {
 
 
         void *outBuffer = malloc(1000);
-        if (rmScanIterator1.getNextTuple(rid, outBuffer) == RBFM_EOF)
+        if (rmScanIterator1.getNextTuple(rid, outBuffer) == RBFM_EOF){
+            // rmScanIterator1.close();
+            // free(outBuffer);
             return -1;
+        }
+
+        // rmScanIterator1.close();
 
         RecordBasedFileManager::instance().openFile(tablesFileName, tablesFileHandle);
         RecordBasedFileManager::instance().deleteRecord(tablesFileHandle, tablesRecordDescriptor, rid);
@@ -379,6 +388,7 @@ namespace PeterDB {
             memset(outBuffer, 0, 1000);
         }
         RecordBasedFileManager::instance().destroyFile(tableName);
+        rmScanIterator2.close();
         free(outBuffer);
         return 0;
     }
@@ -402,10 +412,12 @@ namespace PeterDB {
         free(value);
 
         void *outBuffer = malloc(1000);
+        // std::cout<<"getAttr b4 getnexttuple 1"<<std::endl;
         if (rmScanIterator_table.getNextTuple(rid, outBuffer) == RBFM_EOF ) {
             free(outBuffer);
             return -1;
         }
+        // std::cout<<"getAttr after getnexttuple 1"<<std::endl;
 
         memcpy(&id, (char*)outBuffer + 1, sizeof (int));
 
@@ -416,6 +428,7 @@ namespace PeterDB {
         memcpy(value, &id, sizeof (int));
         scan(attrsFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator_attribute);
         memset(outBuffer, 0, 1000);
+        // std::cout<<"getAttr b4 getnexttuple 2"<<std::endl;
         while (rmScanIterator_attribute.getNextTuple(rid, outBuffer) != RBFM_EOF) {
             Attribute newAttr;
             int length = *(int*)((char*)outBuffer + 1);
@@ -434,6 +447,7 @@ namespace PeterDB {
             attrs.push_back(newAttr);
             memset(outBuffer, 0, 1000);
         }
+        // std::cout<<"getAttr after getnexttuple 2"<<std::endl;
         free(outBuffer);
         free(value);
         return 0;
@@ -575,7 +589,9 @@ namespace PeterDB {
         return 0;
     }
 
-    RC RM_ScanIterator::close() { return 0; }
+    RC RM_ScanIterator::close() { 
+        RBFM_Scan_Iterator.close();
+        return 0; }
 
     // Extra credit work
     RC RelationManager::dropAttribute(const std::string &tableName, const std::string &attributeName) {

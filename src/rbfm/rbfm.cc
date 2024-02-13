@@ -116,6 +116,7 @@ namespace PeterDB {
                 int offset = recordPointer - record;
                 std::memcpy((int*)offsetPointer, &offset, sizeof (int));
                 offsetPointer += sizeof(OffsetLength);
+                //*recordSize -= recordDescriptor[i].length;
                 continue;
             }
 
@@ -123,6 +124,8 @@ namespace PeterDB {
                 case PeterDB::TypeInt:
                 case PeterDB::TypeReal: {
                     memcpy(recordPointer, dataPointer, sizeof(int));
+                    // std::cout<<"Record pointer - record "<< recordPointer - record << std::endl;
+                    // std::cout<<"insert record float data "<<*(float*)recordPointer<< std::endl;
                     recordPointer += sizeof(int);
                     dataPointer += sizeof(int);
                     break;
@@ -134,6 +137,7 @@ namespace PeterDB {
                     *recordSize += dataSize - recordDescriptor[i].length;
                     dataPointer += sizeof(int);
                     memcpy(recordPointer, dataPointer, dataSize);
+                    // std::cout<<"Attribute "<< recordDescriptor[i].name << " " << dataSize << std::endl;
                     recordPointer += dataSize;
                     dataPointer += dataSize;
                     break;
@@ -172,7 +176,7 @@ namespace PeterDB {
             int freeBytes = *(int*)(data + FREE_SPACE_OFFSET);
             free(data);
 
-            if(recordSize + SLOT_SIZE > freeBytes){
+            if(recordSize + SLOT_SIZE + 10 > freeBytes){
                 bool existingPageFound = false;
                 int i=0;
                 void* existingPageBuf= malloc(PAGE_SIZE);
@@ -320,7 +324,9 @@ namespace PeterDB {
         }
 
         writeRecordToPage(record, recordSize,fileHandle, rid);
-
+        // void *readRec = malloc(100000);
+        // RecordBasedFileManager::instance().readRecord(fileHandle, recordDescriptor, rid, readRec);
+        // RecordBasedFileManager::instance().printRecord(recordDescriptor, readRec, std::cout);
         delete[] record;
 
         return 0;
@@ -470,7 +476,7 @@ namespace PeterDB {
     }
 
     void getOrSetFreeSpace (char *page, int &freeBytes, int operation) {
-        int *freeSpacePointer = (int*)(page + PAGE_SIZE - 1 - sizeof (int));
+        int *freeSpacePointer = (int*)(page + FREE_SPACE_OFFSET);
         if (operation == 0) {
             freeBytes = *freeSpacePointer;
         }
@@ -479,7 +485,7 @@ namespace PeterDB {
         }
     }
     void getOrSetNumSlots (char *page, int &numRecords, int operation) {
-        int *numRecordsPointer = (int*)(page + PAGE_SIZE - 1 - (2 * sizeof (int)));
+        int *numRecordsPointer = (int*)(page + NUM_SLOTS_OFFSET);
         if (operation == 0) {
             numRecords = *numRecordsPointer;
         }
@@ -894,6 +900,7 @@ namespace PeterDB {
 //        std::cout << Bitset << std::endl;
         return (Bitset.test(7 - (position % CHAR_BIT)));
     }
+
     RC readSingleAttribute (char *record, char *&attributeValue, int position, AttrType type, int numFields) {
         int bitVectorSize = getActualByteForNullsIndicator (numFields);
         if (checkAttributeNull(record, position))
@@ -912,6 +919,7 @@ namespace PeterDB {
         }
 
         int totalSize = ending - starting;
+        // std::cout<<"total size "<<totalSize<<std::endl;
         if (type == TypeVarChar) {
             attributeValue = (char*) malloc(totalSize + sizeof (int));
             *(int*)attributeValue = totalSize;
@@ -924,6 +932,7 @@ namespace PeterDB {
 
         return 0;
     }
+
     RC compareIntegerAttributes (int a, int b, CompOp compOp) {
         switch (compOp) {
             case EQ_OP: return (a == b);
@@ -985,7 +994,7 @@ namespace PeterDB {
             positions[i] = attributePositions[attributeNames[i]];
             //std::cout << attributeNames[i] << positions[i] << std::endl;
         }
-        std::sort(positions.begin(), positions.begin() + selectedFieldSize);
+        // std::sort(positions.begin(), positions.begin() + selectedFieldSize);
         for (int i = 0; i < selectedFieldSize; ++i) {
             // Calculate destination position
             int destByteIndex = i / 8;
@@ -995,22 +1004,18 @@ namespace PeterDB {
                 result[destByteIndex] |= (1 << (7 - destBitIndex));
             }
         }
-        std::bitset<8> Bitset;
-        memcpy(&Bitset, result, 1);
+        // std::bitset<8> Bitset;
+        // memcpy(&Bitset, result, 1);
         // free(result);
         //std::cout << isNull[1] << " "<<Bitset << std::endl;
     }
 
-    RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&recordDescriptor,
+RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&recordDescriptor,
                                       const std::vector<std::string>&attributeNames,
                                       void *&data, std::unordered_map<std::string, int> &attributePositions) {
 
         char *OGRecordPointer = record + sizeof (int) + sizeof (TombstoneByte);
         int fieldCount = recordDescriptor.size();
-        std::vector <bool> validAttributesIndex (recordDescriptor.size(), false);
-        for (auto i: attributeNames) {
-            validAttributesIndex[attributePositions[i]] = true;
-        }
 
         int originalBitVectorSize = getActualByteForNullsIndicator(fieldCount);
 
@@ -1025,6 +1030,8 @@ namespace PeterDB {
 
         int newBitVectorSize = getActualByteForNullsIndicator(attributeNames.size());
         int total_size = newBitVectorSize;
+        // std::cout<< "nbvs "<< newBitVectorSize << " obvs "<< originalBitVectorSize<<std::endl;
+
         for (auto attributeName : attributeNames) {
             int i = attributePositions[attributeName];
             total_size += recordDescriptor[i].length;
@@ -1032,7 +1039,7 @@ namespace PeterDB {
                 total_size += sizeof (int);
         }
 
-        char deserializedRecord [total_size];
+        char* deserializedRecord = (char*)malloc(total_size);
         char *deSerRecordPointer = deserializedRecord;
         memset(deserializedRecord, 0, total_size);
 
@@ -1045,54 +1052,73 @@ namespace PeterDB {
         OGRecordPointer += originalBitVectorSize;
         char *OGRecordDataPointer = OGRecordPointer + (fieldCount * sizeof (OffsetLength));
         char *OGRecordOffsetPointer = OGRecordPointer;
-
-        for (int i = 0; i < fieldCount; i++) {
-            if (isNull[i] || !validAttributesIndex[i]) {
-                //std::cout << i << std::endl;
-                OGRecordDataPointer = record + *(int*)OGRecordOffsetPointer;
-                OGRecordOffsetPointer += sizeof (OffsetLength);
-                if (isNull[i])
-                    total_size -= recordDescriptor[i].length;
-
+        int starting, ending;
+        for (int i = 0; i < attributeNames.size(); i ++) {
+            starting = 0;
+            ending = 0;
+            int position = attributePositions[attributeNames[i]];
+            // std::cout << "OG Record data pointer " << " " << OGRecordDataPointer - record << std::endl;
+            if (isNull[position]) {
+                total_size -= recordDescriptor[position].length;
                 continue;
             }
-            if (recordDescriptor[i].type == 0) {
+            if (position == 0 )
+                starting = OGRecordDataPointer - record;
+            else {
+                starting = *(int*)(OGRecordOffsetPointer + (position - 1)* sizeof(int));
+            }
+
+            if (recordDescriptor[position].type == PeterDB::TypeInt) {
                 int int_data;
-                memcpy(&int_data, OGRecordDataPointer, sizeof (int));
-                OGRecordDataPointer += sizeof (int);
+
+                memcpy(&int_data, record + starting, sizeof (int));
 
                 memcpy((int*)deSerRecordPointer, &int_data, sizeof (int));
+                // std::cout<<"int data with starting "<<int_data << " "<< starting<< std::endl;
                 deSerRecordPointer += sizeof (int);
 
-                OGRecordOffsetPointer += sizeof (OffsetLength) ;
             }
-            else if (recordDescriptor[i].type == 1) {
+            else if (recordDescriptor[position].type == PeterDB::TypeReal) {
                 float float_data;
-                memcpy(&float_data, OGRecordDataPointer, sizeof (float));
-                OGRecordDataPointer += sizeof (float);
 
-                memcpy((int*)deSerRecordPointer, &float_data, sizeof (float));
+                memcpy(&float_data, record + starting, sizeof (float));
+                // std::cout<<"float data with starting "<<float_data << " "<< starting<< std::endl;
+                memcpy((int*)deSerRecordPointer, &float_data, sizeof (int));
                 deSerRecordPointer += sizeof (float);
 
-                OGRecordOffsetPointer += sizeof (OffsetLength) ;
             }
-            else if (recordDescriptor[i].type == 2) {
-                total_size -= recordDescriptor[i].length;
-                int length_of_string = record + *(int*)OGRecordOffsetPointer - OGRecordDataPointer;
-                memcpy((int*)deSerRecordPointer, &length_of_string, sizeof (int));
+            else {
+
+                ending = *(int*)(OGRecordOffsetPointer + (position) * sizeof(int));
+
+                total_size -= recordDescriptor[position].length;
+                int length_of_string = ending - starting;
+                // std::cout << "Length of string " << length_of_string << std::endl;
+                memcpy(deSerRecordPointer, &length_of_string, sizeof (int));
                 deSerRecordPointer += 4;
 
                 total_size += length_of_string;
-                memcpy(deSerRecordPointer, OGRecordDataPointer, length_of_string);
+                memcpy(deSerRecordPointer, record + starting, length_of_string);
+                // std::cout<<"varchar data "<<*(record + starting) << *(record + starting + length_of_string) << std::endl;
                 deSerRecordPointer += length_of_string;
-                OGRecordDataPointer += length_of_string;
-                OGRecordOffsetPointer += sizeof (OffsetLength);
+            }
+            // std::cout << "starting and ending of attribute name " << starting << " " << ending << " " << attributeNames[i] << std::endl;
+        }
+        // std::cout<<"total size of selected attr record: "<< total_size<<std::endl;
+        std::vector <Attribute> selectedRecDes;
+        for(auto i: attributeNames){
+            if(recordDescriptor[attributePositions[i]].name == i){
+                selectedRecDes.push_back(recordDescriptor[attributePositions[i]]);
             }
         }
         memcpy(data, deserializedRecord , total_size);
+        // std::cout<<"\nprinting record\n"<<std::endl;
+        // RecordBasedFileManager::instance().printRecord(selectedRecDes, deserializedRecord, std::cout);
+        // std::cout<<"\ndone printing record\n"<<std::endl;
+        // free(deserializedRecord);
         return 0;
     }
-    
+
     RC checkTombstone (char *record) {
         char tombstoneByte;
         memcpy(&tombstoneByte, record, 1);
@@ -1109,8 +1135,8 @@ namespace PeterDB {
         readStoredRecord (rid, record, page);
         int numFields = *(int*)(record + sizeof (TombstoneByte));
         // std::cout << "First field " << *(int*) (record + sizeof (TombstoneByte) + sizeof (int) + 1);
-        std::bitset<8> testing;
-        memcpy(&testing, (char*)record + sizeof (TombstoneByte) + sizeof (int), 1);
+        // std::bitset<8> testing;
+        // memcpy(&testing, (char*)record + sizeof (TombstoneByte) + sizeof (int), 1);
         // std::cout << "Num Fields " << numFields << std::endl;
         // std::cout << testing << std::endl;
         int position = 0;
@@ -1142,15 +1168,20 @@ namespace PeterDB {
             // std::cout << *(float*)attributeValue << std::endl;
             memcpy((char*)data + 1, attributeValue, sizeof (int));
         }
+        // free(attributeValue);
         return 0;
     }
 
     RC RBFM_ScanIterator::getNextRecord(RID &rid, void *&data) {
         //TODO: test for empty strings
         int reqSatisfied = 0;
+        // std::cout<<"current page "<<currentPage << std::endl;
         while (!reqSatisfied){
-            if (currentPage == fileHandle.getNumberOfPages())
+            if (currentPage == fileHandle.getNumberOfPages()){
+                // free(value);
+                RecordBasedFileManager::instance().closeFile(fileHandle);
                 return RBFM_EOF;
+            }
 
             char page [PAGE_SIZE];
             fileHandle.readPage(currentPage, page);
@@ -1159,7 +1190,6 @@ namespace PeterDB {
             getOrSetFreeSpace(page, freeSpace, 0);
             getOrSetNumSlots(page, numSlots, 0);
 
-//            std::cout << "Number of slots " << numSlots << std::endl;
             if (slotNum == numSlots) {
                 currentPage ++;
                 slotNum = 0;
@@ -1202,8 +1232,10 @@ namespace PeterDB {
                     slotNum ++;
                     continue;
                 }
+                //std::cout<<"attribute value is: "<<*(int*)attributeValue<<std::endl;
+                // free(attributeValue);
             }
-
+            
             //after confirming that condition is satisfied, build the record to be returned
             buildSelectedAttributesRecord (record, recordDescriptor, attributeNames, data, attributePositions);
             rid.pageNum = ridCheck.pageNum;
