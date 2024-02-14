@@ -152,7 +152,11 @@ namespace PeterDB {
 
     RC RBFM_ScanIterator::close(){
         PeterDB::RecordBasedFileManager::instance().closeFile(fileHandle);
-        free(value);
+        if(value){
+            free(value);
+            value = nullptr;
+        }
+        // free(value);
         return 0; 
     }
 
@@ -388,7 +392,7 @@ namespace PeterDB {
         short recordLength = offsetAndLength.second;
 
         if (recordOffset == -1){
-            std::cout << "Cannot read deleted record" << std::endl;
+            // std::cout << "Cannot read deleted record" << std::endl;
             delete[] pageData;
             return -1;
         }
@@ -858,6 +862,7 @@ namespace PeterDB {
         rbfm_ScanIterator.conditionAttribute = conditionAttribute;
         rbfm_ScanIterator.currentPage = 0;
         rbfm_ScanIterator.slotNum = 0;
+        fileHandle.readPage(0,rbfm_ScanIterator.page);
 
         for (int i = 0; i < recordDescriptor.size(); i++) {
             rbfm_ScanIterator.attributePositions[recordDescriptor[i].name] = i;
@@ -1189,8 +1194,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
                 return RBFM_EOF;
             }
 
-            char page [PAGE_SIZE];
-            fileHandle.readPage(currentPage, page);
+            // char page [PAGE_SIZE];
             int freeSpace = 0;
             int numSlots = 0;
             getOrSetFreeSpace(page, freeSpace, 0);
@@ -1198,6 +1202,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
 
             if (slotNum == numSlots) {
                 currentPage ++;
+                fileHandle.readPage(currentPage, page);
                 slotNum = 0;
                 continue;
             }

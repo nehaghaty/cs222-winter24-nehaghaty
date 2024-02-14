@@ -76,6 +76,7 @@ namespace PeterDB {
         unsigned currentPage;
         unsigned slotNum;
         std::unordered_map<std::string, int> attributePositions;
+        char page[PAGE_SIZE];
     };
 
     class RecordBasedFileManager {
