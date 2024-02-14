@@ -107,8 +107,9 @@ namespace PeterDB {
             std::fseek(fileHandle.file, sizeof(int) * 3 + 1, SEEK_SET);
             std::fwrite(&fileHandle.readPageCounter, sizeof (int), 1, fileHandle.file);
             fclose(fileHandle.file);
+            fileHandle.file=nullptr;
         }
-        
+
         return 0;
     }
 

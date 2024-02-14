@@ -1123,10 +1123,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
             }
         }
         memcpy(data, deserializedRecord , total_size);
-        // std::cout<<"\nprinting record\n"<<std::endl;
-        // RecordBasedFileManager::instance().printRecord(selectedRecDes, deserializedRecord, std::cout);
-        // std::cout<<"\ndone printing record\n"<<std::endl;
-        // free(deserializedRecord);
+        free(deserializedRecord);
         return 0;
     }
 
@@ -1138,7 +1135,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
 
     RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor,
                                              const RID &rid, const std::string &attributeName, void *data) {
-        char *attributeValue;
+        char *attributeValue = nullptr;
         char page [PAGE_SIZE];
         fileHandle.readPage(rid.pageNum, page);
 
@@ -1179,7 +1176,9 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
             // std::cout << *(float*)attributeValue << std::endl;
             memcpy((char*)data + 1, attributeValue, sizeof (int));
         }
-        // free(attributeValue);
+        if(attributeValue){
+            free(attributeValue);
+        }
         return 0;
     }
 
@@ -1244,7 +1243,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
                     continue;
                 }
                 //std::cout<<"attribute value is: "<<*(int*)attributeValue<<std::endl;
-                // free(attributeValue);
+                free(attributeValue);
             }
             
             //after confirming that condition is satisfied, build the record to be returned
