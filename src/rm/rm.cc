@@ -528,7 +528,10 @@ namespace PeterDB {
         else
             getAttributes(tableName, attrs);
         if(rbfm.openFile(tableName.c_str(), fileHandle)) return -1;
-        if(rbfm.readRecord(fileHandle, attrs, rid, data)) return -1;
+        if(rbfm.readRecord(fileHandle, attrs, rid, data)) {
+            rbfm.closeFile(fileHandle);
+            return -1;
+        }
         rbfm.closeFile(fileHandle);
         return 0;
     }
