@@ -287,7 +287,7 @@ namespace PeterDB {
             memset(outBuffer, 0, 1000);
             RID rid;
             int idCounter = 0;
-            std::cout<<"createTable b4 getnexttuple"<<std::endl;
+            // std::cout<<"createTable b4 getnexttuple"<<std::endl;
             while (rmsi.getNextTuple(rid, outBuffer) != RBFM_EOF) {
                 idCounter++;
             }
@@ -415,8 +415,10 @@ namespace PeterDB {
         // std::cout<<"getAttr b4 getnexttuple 1"<<std::endl;
         if (rmScanIterator_table.getNextTuple(rid, outBuffer) == RBFM_EOF ) {
             free(outBuffer);
+            rmScanIterator_table.close();
             return -1;
         }
+        rmScanIterator_table.close();
         // std::cout<<"getAttr after getnexttuple 1"<<std::endl;
 
         memcpy(&id, (char*)outBuffer + 1, sizeof (int));
@@ -447,6 +449,7 @@ namespace PeterDB {
             attrs.push_back(newAttr);
             memset(outBuffer, 0, 1000);
         }
+        rmScanIterator_attribute.close();
         // std::cout<<"getAttr after getnexttuple 2"<<std::endl;
         free(outBuffer);
         free(value);

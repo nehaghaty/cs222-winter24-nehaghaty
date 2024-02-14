@@ -150,6 +150,12 @@ namespace PeterDB {
         }
     }
 
+    RC RBFM_ScanIterator::close(){
+        PeterDB::RecordBasedFileManager::instance().closeFile(fileHandle);
+        free(value);
+        return 0; 
+    }
+
     void createNewPageDir(FileHandle &fileHandle, char* page){
         char *inBuffer = (char*)malloc(PAGE_SIZE);
         memset(inBuffer,0,PAGE_SIZE);
@@ -1179,7 +1185,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
         while (!reqSatisfied){
             if (currentPage == fileHandle.getNumberOfPages()){
                 // free(value);
-                RecordBasedFileManager::instance().closeFile(fileHandle);
+                // RecordBasedFileManager::instance().closeFile(fileHandle);
                 return RBFM_EOF;
             }
 
