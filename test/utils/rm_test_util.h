@@ -552,6 +552,7 @@ namespace PeterDBTesting {
             // Is the lat field not-NULL?
             if (!((nullsIndicator[0] >> 1u) & 1u)) {
                 *(float *) ((char *) buffer + offset) = (dist100(generator) % 45) * 4.0f;
+                // std::cout << "Generating data " << *(float *) ((char *) buffer + offset) << std::endl;
                 offset += sizeof(float);
             }
 

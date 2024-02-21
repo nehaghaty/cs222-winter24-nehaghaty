@@ -121,13 +121,13 @@ Columns table:
 
 
 ### 8. Member contribution (for team of two)
-- 
-
+- Sanket: scan, getAttributes, deleteRecord, insertTuple/updateTuple/deleteTuple, RBFM scan interator
+- Neha: updateRecord, createTable/deleteTable, createCatalog/deleteCatalog
 
 
 ### 9. Other (optional)
 - Freely use this section to tell us about things that are related to the project 1, but not related to the other sections (optional)
-
-
+ 
 
 - Feedback on the project to help improve the project. (optional)
+   - Info given in class has to be consistent with what the tests expect. For example, column names and number of columns of Attributed table.

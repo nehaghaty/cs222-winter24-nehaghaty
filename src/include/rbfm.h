@@ -64,7 +64,7 @@ namespace PeterDB {
         // "data" follows the same format as RecordBasedFileManager::insertRecord().
         RC getNextRecord(RID &rid, void *&data);
 
-        RC close() { return -1; };
+        RC close();
 
         FileHandle fileHandle;
         std::vector<Attribute> recordDescriptor;
@@ -76,6 +76,7 @@ namespace PeterDB {
         unsigned currentPage;
         unsigned slotNum;
         std::unordered_map<std::string, int> attributePositions;
+        char page[PAGE_SIZE];
     };
 
     class RecordBasedFileManager {
