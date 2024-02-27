@@ -8,7 +8,7 @@
 
 namespace PeterDB {
 
-    typedef unsigned PageNum;
+    typedef int PageNum;
     typedef int RC;
 
     class FileHandle;
