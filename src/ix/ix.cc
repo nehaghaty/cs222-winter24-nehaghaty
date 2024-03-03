@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstring>
+#include <algorithm>
 #include "src/include/ix.h"
 
 typedef unsigned    NumKeysLength;
