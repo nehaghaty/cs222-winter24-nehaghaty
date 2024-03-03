@@ -75,27 +75,68 @@ namespace PeterDB {
 
     };
 
-
-    class IX_ScanIterator {
+// Abstract class Node
+    class Node {
     public:
-
+        int freeSpace;
+        unsigned numKeys;
+        char isLeaf;
+        std::vector<char*> varcharKeys; // Dynamic array of character pointers
+        std::vector<int> intKeys;
+        std::vector<float> floatKeys;
 
         // Constructor
-        IX_ScanIterator();
+        Node() = default; // Default constructor
 
 
-        // Destructor
-        ~IX_ScanIterator();
+        // Virtual destructor
+        virtual ~Node() {}
 
 
-        // Get next matching entry
-        RC getNextEntry(RID &rid, void *key);
-
-
-        // Terminate index scan
-        RC close();
+        // Pure virtual functions for serialization and deserialization
+        virtual void Serialize(void* data, const Attribute &attribute) = 0;
+        virtual void Deserialize(const void* data, const Attribute &attribute) = 0;
+        void writeNodeToFile(Attribute attribute, PageNum pageNum, IXFileHandle &ixFileHandle);
+        void appendNodeToFile(Attribute attribute, IXFileHandle &ixFileHandle);
     };
 
+
+    // Derived class InternalNode
+    class InternalNode : public Node {
+    public:
+        std::vector<PageNum> children;
+        // Implementations of pure virtual functions
+        void Serialize(void *data, const Attribute &attribute) override;
+
+        void Deserialize(const void* data, const Attribute &attribute) override;
+
+        //void writeNodeToPage(void *data, PageNum pageNum, IXFileHandle &ixFileHandle) override;
+
+        // Constructor and destructor if needed
+        InternalNode();
+        ~InternalNode() = default;
+    };
+
+
+// Derived class LeafNode
+    class LeafNode : public Node {
+    public:
+        std::vector<PeterDB::RID> rids; // Additional member for LeafNode
+        PageNum next; // Sibling pointer
+
+
+        // Implementations of pure virtual functions
+        void Serialize(void *data, const Attribute &attribute) override;
+
+
+        void Deserialize(const void* data, const Attribute &attribute) override;
+
+//        void writeNodeToPage(void *data, PageNum pageNum, IXFileHandle &ixFileHandle) override;
+
+        // Constructor and destructor if needed
+        LeafNode();
+        ~LeafNode() = default;
+    };
 
     class IXFileHandle {
     public:
@@ -127,63 +168,29 @@ namespace PeterDB {
 
     };
 
-
-// Abstract class Node
-    class Node {
+    class IX_ScanIterator {
     public:
-        int freeSpace;
-        int numKeys;
-        char isLeaf;
-        std::vector<char*> varcharKeys; // Dynamic array of character pointers
-        std::vector<int> intKeys;
-        std::vector<float> floatKeys;
-
         // Constructor
-        Node() = default; // Default constructor
+        IX_ScanIterator();
 
+        // Destructor
+        ~IX_ScanIterator();
 
-        // Virtual destructor
-        virtual ~Node() {}
+        Attribute attribute;
+        void *lowKey;
+        void *highKey;
+        bool lowKeyInclusive;
+        bool highKeyInclusive;
+        IXFileHandle ixFileHandle;
+        int currentIndex;
 
+        LeafNode leafNode;
+        // Get next matching entry
+        RC getNextEntry(RID &rid, void *key);
 
-        // Pure virtual functions for serialization and deserialization
-        virtual void Serialize(void* data, const Attribute &attribute) = 0;
-        virtual void Deserialize(const void* data, const Attribute &attribute) = 0;
+        // Terminate index scan
+        RC close();
     };
 
-
-    // Derived class InternalNode
-    class InternalNode : public Node {
-    public:
-        std::vector<PageNum> children;
-        // Implementations of pure virtual functions
-        void Serialize(void *data, const Attribute &attribute) override;
-
-        void Deserialize(const void* data, const Attribute &attribute) override;
-
-        // Constructor and destructor if needed
-        InternalNode() = default;
-        ~InternalNode() override = default;
-    };
-
-
-// Derived class LeafNode
-    class LeafNode : public Node {
-    public:
-        std::vector<PeterDB::RID> rids; // Additional member for LeafNode
-        PageNum next; // Sibling pointer
-
-
-        // Implementations of pure virtual functions
-        void Serialize(void *data, const Attribute &attribute) override;
-
-
-        void Deserialize(const void* data, const Attribute &attribute) override;
-
-
-        // Constructor and destructor if needed
-        LeafNode();
-        ~LeafNode() = default;
-    };
 }// namespace PeterDB
 #endif // _ix_h_

@@ -85,7 +85,7 @@ namespace PeterDB {
                     fread(&fileHandle.readPageCounter, sizeof (int), 1, file);
                 }
                 return 0;
-                }
+            }
         }
         else {
             std::cout << "File does not exist" << std::endl;
