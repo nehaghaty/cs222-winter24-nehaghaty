@@ -1071,6 +1071,7 @@ namespace PeterDB {
             returnedPage = findChildPointer(internalNode, key, attribute);
             deleteNode(returnedPage, attribute, iXFileHandle, key, rid);
         }
+        return 0;
     }
     RC
     IndexManager::deleteEntry(IXFileHandle &iXFileHandle, const Attribute &attribute, const void *key, const RID &rid) {
