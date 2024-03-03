@@ -16,7 +16,7 @@ typedef char        isLeafIndicator;
 #define FREE_SPACE_OFFSET   (PAGE_SIZE - FREE_SPACE_BYTES - 1)
 #define NUM_KEYS_OFFSET     (FREE_SPACE_OFFSET - NUM_KEYS_BYTES)
 #define IS_LEAF_OFFSET      (NUM_KEYS_OFFSET - IS_LEAF_BYTES)
-#define SIB_PTR             (IS_LEAF_OFFSET - SIBLING_BYTES)
+#define SIB_PTR_OFFSET             (IS_LEAF_OFFSET - SIBLING_BYTES)
 
 namespace PeterDB {
     IndexManager &IndexManager::instance() {
@@ -52,7 +52,7 @@ namespace PeterDB {
     }
 
     LeafNode::LeafNode(){
-        next = -1;
+        next = 0;
         numKeys = 0;
         freeSpace = PAGE_SIZE - FREE_SPACE_BYTES - NUM_KEYS_BYTES - IS_LEAF_BYTES - SIBLING_BYTES;
         isLeaf = 1;
@@ -304,7 +304,7 @@ namespace PeterDB {
             case TypeInt:
                 if(index == -1){
                     internalNode.intKeys.push_back(*(int*)key);
-                    return internalNode.floatKeys.size()-1;
+                    return internalNode.intKeys.size()-1;
                 }
                 internalNode.intKeys.insert(internalNode.intKeys.begin()+index, *(int*)key);
                 return index;
@@ -456,6 +456,7 @@ namespace PeterDB {
     void splitLeafNodes (LeafNode &leafNode1, LeafNode &leafNode2,
                          IXFileHandle &iXFileHandle, const Attribute& attribute) {
         PageNum newLeafNodePage = iXFileHandle.iXgetNumberOfPages();
+        leafNode2.next = leafNode1.next;
         leafNode1.next = newLeafNodePage;
         int numKeys = leafNode1.numKeys;
 
@@ -890,6 +891,7 @@ namespace PeterDB {
         *(int*)((char*)data + FREE_SPACE_OFFSET) = freeSpace;
         *(int*)((char*)data + NUM_KEYS_OFFSET) = numKeys;
         *(char*)((char*)data + IS_LEAF_OFFSET) = isLeaf;
+        *(PageNum *)((char*)data + SIB_PTR_OFFSET) = next;
         char* offsetPointer = (char*)data ; // Advance past header
 
         switch (attribute.type) {
@@ -909,6 +911,7 @@ namespace PeterDB {
         freeSpace = *(int*)((char*)data + FREE_SPACE_OFFSET);
         numKeys = *(int*)((char*)data + NUM_KEYS_OFFSET);
         isLeaf = *(char*)((char*)data + IS_LEAF_OFFSET);
+        next = *(PageNum *)((char*)data + SIB_PTR_OFFSET);
         char* offsetPointer = (char*)data;
         std::vector<PageNum> emptyChildren;
 
@@ -1203,7 +1206,7 @@ namespace PeterDB {
 
         currentIndex++;
         if (currentIndex == leafNode.numKeys) {
-            if (leafNode.next == -1)
+            if (leafNode.next == 0)
                 currentIndex = -1;
             else {
                 char desPage [PAGE_SIZE];
