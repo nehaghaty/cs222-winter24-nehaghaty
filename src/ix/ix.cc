@@ -461,22 +461,22 @@ namespace PeterDB {
 
         switch (attribute.type) {
             case TypeInt:
-                leafNode2.intKeys = std::vector<int>(leafNode1.intKeys.end() - (numKeys/2),
+                leafNode2.intKeys = std::vector<int>(leafNode1.intKeys.begin() + (numKeys/2),
                                                      leafNode1.intKeys.end());
 
                 // Erase the last 5 entries from the original vector
-                leafNode1.intKeys.erase(leafNode1.intKeys.end() - (numKeys/2),
+                leafNode1.intKeys.erase(leafNode1.intKeys.begin() + (numKeys/2),
                                         leafNode1.intKeys.end());
                 leafNode1.numKeys = leafNode1.intKeys.size();
                 leafNode2.numKeys = leafNode2.intKeys.size();
                 break;
 
             case TypeReal:
-                leafNode2.floatKeys = std::vector<float>(leafNode1.floatKeys.end() - (numKeys/2),
+                leafNode2.floatKeys = std::vector<float>(leafNode1.floatKeys.begin() + (numKeys/2),
                                                          leafNode1.floatKeys.end());
 
                 // Erase the last 5 entries from the original vector
-                leafNode1.floatKeys.erase(leafNode1.floatKeys.end() - (numKeys/2),
+                leafNode1.floatKeys.erase(leafNode1.floatKeys.begin() + (numKeys/2),
                                           leafNode1.floatKeys.end());
                 leafNode1.numKeys = leafNode1.floatKeys.size();
                 leafNode2.numKeys = leafNode2.floatKeys.size();
@@ -670,10 +670,10 @@ namespace PeterDB {
 
     int findKeyDelete (LeafNode leafNode, const void *searchKey, const Attribute &attribute, const RID &rid) {
         if(attribute.type == PeterDB::TypeInt){
-            std::cout << "Finding Key to delete " << *(int*)searchKey << std::endl;
+//            std::cout << "Finding Key to delete " << *(int*)searchKey << std::endl;
             for (int i = 0; i < leafNode.intKeys.size(); i++) {
-                std::cout << "Going through key " << leafNode.intKeys[i] << " with RID: " << leafNode.rids[i].pageNum
-                          << " " << leafNode.rids[i].slotNum << std::endl;
+//                std::cout << "Going through key " << leafNode.intKeys[i] << " with RID: " << leafNode.rids[i].pageNum
+//                          << " " << leafNode.rids[i].slotNum << std::endl;
 
                 if(leafNode.intKeys[i] == *(int*)searchKey){
                     if (leafNode.rids[i].pageNum == rid.pageNum)
@@ -709,7 +709,7 @@ namespace PeterDB {
     }
 
     int search(PageNum rootPtr, const void* key, IXFileHandle &iXFileHandle, const Attribute &attribute) {
-        std::cout << "Searching Page " << rootPtr << std::endl;
+//        std::cout << "Searching Page " << rootPtr << std::endl;
         void *desPage[PAGE_SIZE];
         memset(desPage, 0, PAGE_SIZE);
         iXFileHandle.iXReadPage(rootPtr, desPage);
@@ -1163,34 +1163,35 @@ namespace PeterDB {
                 highKeyStr = std::string((char *) highKey + sizeof(int), highKeyLen);
 
                 if (highKeyInclusive) {
-                    if (keyStr >= highKeyStr)
+                    if (keyStr > highKeyStr)
                         return true;
                 } else {
-                    if (keyStr > highKeyStr)
+                    if (keyStr >= highKeyStr)
                         return true;
                 }
                 break;
 
             case TypeReal:
                 if (highKeyInclusive) {
-                    if (*(float *) key >= *(float *) highKey)
+                    if (*(float *) key > *(float *) highKey)
                         return true;
                 } else {
-                    if (*(float *) key > *(float *) highKey)
+                    if (*(float *) key >= *(float *) highKey)
                         return true;
                 }
                 break;
             case TypeInt:
                 if (highKeyInclusive) {
-                    if (*(int *) key >= *(int *) highKey)
+                    if (*(int *) key > *(int *) highKey)
                         return true;
                 } else {
-                    if (*(int *) key > *(int *) highKey)
+                    if (*(int *) key >= *(int *) highKey)
                         return true;
                 }
                 break;
         }
     }
+
     RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
 
         if (currentIndex == -1)
