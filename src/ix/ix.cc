@@ -17,6 +17,9 @@ typedef char        isLeafIndicator;
 #define NUM_KEYS_OFFSET     (FREE_SPACE_OFFSET - NUM_KEYS_BYTES)
 #define IS_LEAF_OFFSET      (NUM_KEYS_OFFSET - IS_LEAF_BYTES)
 #define SIB_PTR_OFFSET             (IS_LEAF_OFFSET - SIBLING_BYTES)
+#define LEFT_PTR_OFFSET             (SIB_PTR_OFFSET - SIBLING_BYTES)
+#define PAGE_NUM_OFFSET             (LEFT_PTR_OFFSET - SIBLING_BYTES)
+
 
 namespace PeterDB {
     IndexManager &IndexManager::instance() {
@@ -54,8 +57,10 @@ namespace PeterDB {
     LeafNode::LeafNode(){
         next = 0;
         numKeys = 0;
-        freeSpace = PAGE_SIZE - FREE_SPACE_BYTES - NUM_KEYS_BYTES - IS_LEAF_BYTES - SIBLING_BYTES;
+        freeSpace = PAGE_SIZE - FREE_SPACE_BYTES - NUM_KEYS_BYTES - IS_LEAF_BYTES - SIBLING_BYTES*3;
         isLeaf = 1;
+        prev = 0;
+        pageNum = 0;
     }
 
     InternalNode::InternalNode() {
@@ -63,6 +68,77 @@ namespace PeterDB {
         freeSpace = PAGE_SIZE - FREE_SPACE_BYTES - NUM_KEYS_BYTES - IS_LEAF_BYTES;
         isLeaf = 0;
     }
+
+        template<typename KeyType>
+    void copyKeys(char*& offsetPointer, const std::vector<KeyType>& keys, const std::vector<RID>& rids,
+                  const std::vector<PageNum>& children) {
+        assert(keys.size() + 1 == children.size() || children.empty()); // Ensure children size is correct for internal nodes
+
+        for (size_t i = 0; i < keys.size(); ++i) {
+            // Handle keys
+            if (keys[i] == -1)
+                continue;
+
+            memcpy(offsetPointer, &keys[i], sizeof(KeyType));
+            offsetPointer += sizeof(KeyType);
+
+            // Copy RIDs for leaf nodes
+            if (!rids.empty()) {
+                memcpy(offsetPointer, &rids[i].pageNum, sizeof(rids[i].pageNum));
+                offsetPointer += sizeof(rids[i].pageNum);
+                memcpy(offsetPointer, &rids[i].slotNum, sizeof (rids[i].slotNum));
+                offsetPointer += sizeof(rids[i].slotNum);
+            }
+
+            // Copy children page numbers for internal nodes
+            if (!children.empty()) {
+                memcpy(offsetPointer, &children[i], sizeof(PageNum));
+                offsetPointer += sizeof(PageNum);
+            }
+        }
+
+        // For internal nodes, also copy the last child
+        if (!children.empty()) {
+            memcpy(offsetPointer, &children.back(), sizeof(PageNum));
+            offsetPointer += sizeof(PageNum);
+        }
+    }
+
+    template<>
+    void copyKeys<char*>(char*& offsetPointer, const std::vector<char*>& keys, const std::vector<RID>& rids,
+                         const std::vector<PageNum>& children) {
+        for (size_t i = 0; i < keys.size(); ++i) {
+            if (keys[i] == nullptr)
+                continue;
+
+            int keyLen = *(int*)keys[i];
+            memcpy(offsetPointer, &keyLen, sizeof(int));
+            offsetPointer += sizeof(int);
+            memcpy(offsetPointer, keys[i] + sizeof(int), keyLen);
+            offsetPointer += keyLen;
+
+            // Copy RIDs for leaf nodes
+            if (!rids.empty()) {
+                memcpy(offsetPointer, &rids[i].pageNum, sizeof(rids[i].pageNum));
+                offsetPointer += sizeof(rids[i].pageNum);
+                memcpy(offsetPointer, &rids[i].slotNum, sizeof (rids[i].slotNum));
+                offsetPointer += sizeof(rids[i].slotNum);
+            }
+
+            // Copy children page numbers for internal nodes
+            if (!children.empty() && i < children.size()) {
+                memcpy(offsetPointer, &children[i], sizeof(PageNum));
+                offsetPointer += sizeof(PageNum);
+            }
+        }
+
+        // For internal nodes, also copy the last child
+        if (!children.empty()) {
+            memcpy(offsetPointer, &children.back(), sizeof(PageNum));
+            offsetPointer += sizeof(PageNum);
+        }
+    }
+
 
     void readDummyHeadFromFile (IXFileHandle &iXFileHandle) {
         char hiddenPage[PAGE_SIZE];
@@ -129,6 +205,7 @@ namespace PeterDB {
             iXFileHandle.iXAppendPage(hiddenPage);
         }
         leafNode.isLeaf = 1;
+        leafNode.pageNum = 1;
         void* sePage[PAGE_SIZE];
         memset(sePage, 0, PAGE_SIZE);
         leafNode.Serialize(sePage, attribute);
@@ -453,7 +530,24 @@ namespace PeterDB {
     void splitLeafNodes (LeafNode &leafNode1, LeafNode &leafNode2,
                          IXFileHandle &iXFileHandle, const Attribute& attribute) {
         PageNum newLeafNodePage = iXFileHandle.iXgetNumberOfPages();
+
+        // back ptr
+        PageNum thirdPageNum = leafNode1.next;
+        if(thirdPageNum != 0){
+            char thirdPageData[PAGE_SIZE];
+            memset(thirdPageData, 0, PAGE_SIZE);
+            iXFileHandle.iXReadPage(thirdPageNum, thirdPageData);
+            LeafNode thirdLeaf;
+            thirdLeaf.Deserialize(thirdPageData, attribute);
+            thirdLeaf.prev = leafNode2.pageNum;
+            iXFileHandle.iXWritePage(thirdPageNum, thirdPageData);
+        }
+
         leafNode2.next = leafNode1.next;
+
+        leafNode2.prev = leafNode1.pageNum;
+        leafNode2.pageNum = newLeafNodePage;
+
         leafNode1.next = newLeafNodePage;
         int numKeys = leafNode1.numKeys;
 
@@ -711,76 +805,6 @@ namespace PeterDB {
     }
 
     template<typename KeyType>
-    void copyKeys(char*& offsetPointer, const std::vector<KeyType>& keys, const std::vector<RID>& rids,
-                  const std::vector<PageNum>& children) {
-        assert(keys.size() + 1 == children.size() || children.empty()); // Ensure children size is correct for internal nodes
-
-        for (size_t i = 0; i < keys.size(); ++i) {
-            // Handle keys
-            if (keys[i] == -1)
-                continue;
-
-            memcpy(offsetPointer, &keys[i], sizeof(KeyType));
-            offsetPointer += sizeof(KeyType);
-
-            // Copy RIDs for leaf nodes
-            if (!rids.empty()) {
-                memcpy(offsetPointer, &rids[i].pageNum, sizeof(rids[i].pageNum));
-                offsetPointer += sizeof(rids[i].pageNum);
-                memcpy(offsetPointer, &rids[i].slotNum, sizeof (rids[i].slotNum));
-                offsetPointer += sizeof(rids[i].slotNum);
-            }
-
-            // Copy children page numbers for internal nodes
-            if (!children.empty()) {
-                memcpy(offsetPointer, &children[i], sizeof(PageNum));
-                offsetPointer += sizeof(PageNum);
-            }
-        }
-
-        // For internal nodes, also copy the last child
-        if (!children.empty()) {
-            memcpy(offsetPointer, &children.back(), sizeof(PageNum));
-            offsetPointer += sizeof(PageNum);
-        }
-    }
-
-    template<>
-    void copyKeys<char*>(char*& offsetPointer, const std::vector<char*>& keys, const std::vector<RID>& rids,
-                         const std::vector<PageNum>& children) {
-        for (size_t i = 0; i < keys.size(); ++i) {
-            if (keys[i] == nullptr)
-                continue;
-
-            int keyLen = *(int*)keys[i];
-            memcpy(offsetPointer, &keyLen, sizeof(int));
-            offsetPointer += sizeof(int);
-            memcpy(offsetPointer, keys[i] + sizeof(int), keyLen);
-            offsetPointer += keyLen;
-
-            // Copy RIDs for leaf nodes
-            if (!rids.empty()) {
-                memcpy(offsetPointer, &rids[i].pageNum, sizeof(rids[i].pageNum));
-                offsetPointer += sizeof(rids[i].pageNum);
-                memcpy(offsetPointer, &rids[i].slotNum, sizeof (rids[i].slotNum));
-                offsetPointer += sizeof(rids[i].slotNum);
-            }
-
-            // Copy children page numbers for internal nodes
-            if (!children.empty() && i < children.size()) {
-                memcpy(offsetPointer, &children[i], sizeof(PageNum));
-                offsetPointer += sizeof(PageNum);
-            }
-        }
-
-        // For internal nodes, also copy the last child
-        if (!children.empty()) {
-            memcpy(offsetPointer, &children.back(), sizeof(PageNum));
-            offsetPointer += sizeof(PageNum);
-        }
-    }
-
-    template<typename KeyType>
     void populateKeys(char*& offsetPointer, std::vector<KeyType>& keys, std::vector<RID>& rids,
                       std::vector<PageNum>& children, int numKeys, bool isLeaf) {
 
@@ -863,47 +887,97 @@ namespace PeterDB {
         }
     }
 
-
     void LeafNode::Serialize(void* data, const Attribute &attribute) {
-        *(int*)((char*)data + FREE_SPACE_OFFSET) = freeSpace;
-        *(int*)((char*)data + NUM_KEYS_OFFSET) = numKeys;
-        *(char*)((char*)data + IS_LEAF_OFFSET) = isLeaf;
-        *(PageNum *)((char*)data + SIB_PTR_OFFSET) = next;
-        char* offsetPointer = (char*)data ; // Advance past header
+       *(int*)((char*)data + FREE_SPACE_OFFSET) = freeSpace;
+       *(int*)((char*)data + NUM_KEYS_OFFSET) = numKeys;
+       *(char*)((char*)data + IS_LEAF_OFFSET) = isLeaf;
+       *(PageNum *)((char*)data + SIB_PTR_OFFSET) = next;
+       *(PageNum *)((char*)data + LEFT_PTR_OFFSET) = prev;
+       *(PageNum *)((char*)data + PAGE_NUM_OFFSET) = pageNum;
 
-        switch (attribute.type) {
-            case TypeInt:
-                copyKeys<int>(offsetPointer, intKeys, rids, std::vector<PageNum>());
-                break;
-            case TypeReal:
-                copyKeys<float>(offsetPointer, floatKeys, rids, std::vector<PageNum>());
-                break;
-            case TypeVarChar:
-                copyKeys<char*>(offsetPointer, varcharKeys, rids, std::vector<PageNum>());
-                break;
-        }
-    }
 
-    void LeafNode::Deserialize(const void* data, const Attribute &attribute) {
-        freeSpace = *(int*)((char*)data + FREE_SPACE_OFFSET);
-        numKeys = *(int*)((char*)data + NUM_KEYS_OFFSET);
-        isLeaf = *(char*)((char*)data + IS_LEAF_OFFSET);
-        next = *(PageNum *)((char*)data + SIB_PTR_OFFSET);
-        char* offsetPointer = (char*)data;
-        std::vector<PageNum> emptyChildren;
+       char* offsetPointer = (char*)data ; // Advance past header
 
-        switch (attribute.type) {
-            case TypeInt:
-                populateKeys<int>(offsetPointer, intKeys, rids, emptyChildren, numKeys, true);
-                break;
-            case TypeReal:
-                populateKeys<float>(offsetPointer, floatKeys, rids,emptyChildren, numKeys, true);
-                break;
-            case TypeVarChar:
-                populateKeys<char*>(offsetPointer, varcharKeys, rids, emptyChildren, numKeys, true);
-                break;
-        }
-    }
+       switch (attribute.type) {
+           case TypeInt:
+               copyKeys<int>(offsetPointer, intKeys, rids, std::vector<PageNum>());
+               break;
+           case TypeReal:
+               copyKeys<float>(offsetPointer, floatKeys, rids, std::vector<PageNum>());
+               break;
+           case TypeVarChar:
+               copyKeys<char*>(offsetPointer, varcharKeys, rids, std::vector<PageNum>());
+               break;
+       }
+   }
+
+   void LeafNode::Deserialize(const void* data, const Attribute &attribute) {
+       freeSpace = *(int*)((char*)data + FREE_SPACE_OFFSET);
+       numKeys = *(int*)((char*)data + NUM_KEYS_OFFSET);
+       isLeaf = *(char*)((char*)data + IS_LEAF_OFFSET);
+       next = *(PageNum *)((char*)data + SIB_PTR_OFFSET);
+       prev = *(PageNum *)((char*)data + LEFT_PTR_OFFSET);
+       pageNum = *(PageNum *)((char*)data + PAGE_NUM_OFFSET);
+       char* offsetPointer = (char*)data;
+       std::vector<PageNum> emptyChildren;
+
+       switch (attribute.type) {
+           case TypeInt:
+               populateKeys<int>(offsetPointer, intKeys, rids, emptyChildren, numKeys, true);
+               break;
+           case TypeReal:
+               populateKeys<float>(offsetPointer, floatKeys, rids,emptyChildren, numKeys, true);
+               break;
+           case TypeVarChar:
+               populateKeys<char*>(offsetPointer, varcharKeys, rids, emptyChildren, numKeys, true);
+               break;
+       }
+   }
+
+
+
+
+    // void LeafNode::Serialize(void* data, const Attribute &attribute) {
+    //     *(int*)((char*)data + FREE_SPACE_OFFSET) = freeSpace;
+    //     *(int*)((char*)data + NUM_KEYS_OFFSET) = numKeys;
+    //     *(char*)((char*)data + IS_LEAF_OFFSET) = isLeaf;
+    //     *(PageNum *)((char*)data + SIB_PTR_OFFSET) = next;
+    //     char* offsetPointer = (char*)data ; // Advance past header
+
+    //     switch (attribute.type) {
+    //         case TypeInt:
+    //             copyKeys<int>(offsetPointer, intKeys, rids, std::vector<PageNum>());
+    //             break;
+    //         case TypeReal:
+    //             copyKeys<float>(offsetPointer, floatKeys, rids, std::vector<PageNum>());
+    //             break;
+    //         case TypeVarChar:
+    //             copyKeys<char*>(offsetPointer, varcharKeys, rids, std::vector<PageNum>());
+    //             break;
+    //     }
+    // }
+
+    // void LeafNode::Deserialize(const void* data, const Attribute &attribute) {
+    //     freeSpace = *(int*)((char*)data + FREE_SPACE_OFFSET);
+    //     numKeys = *(int*)((char*)data + NUM_KEYS_OFFSET);
+    //     isLeaf = *(char*)((char*)data + IS_LEAF_OFFSET);
+    //     next = *(PageNum *)((char*)data + SIB_PTR_OFFSET);
+
+    //     char* offsetPointer = (char*)data;
+    //     std::vector<PageNum> emptyChildren;
+
+    //     switch (attribute.type) {
+    //         case TypeInt:
+    //             populateKeys<int>(offsetPointer, intKeys, rids, emptyChildren, numKeys, true);
+    //             break;
+    //         case TypeReal:
+    //             populateKeys<float>(offsetPointer, floatKeys, rids,emptyChildren, numKeys, true);
+    //             break;
+    //         case TypeVarChar:
+    //             populateKeys<char*>(offsetPointer, varcharKeys, rids, emptyChildren, numKeys, true);
+    //             break;
+    //     }
+    // }
 
     void InternalNode::Serialize(void* data, const Attribute &attribute) {
         *(int*)((char*)data + FREE_SPACE_OFFSET) = freeSpace;
@@ -1226,6 +1300,22 @@ namespace PeterDB {
         char desPage [PAGE_SIZE];
         iXFileHandle.iXReadPage(returnedPage, ix_ScanIterator.currentPage);
         ix_ScanIterator.leafNode.Deserialize(ix_ScanIterator.currentPage, attribute);
+
+        std::cout<<"returned page: "<< returnedPage << " "<< ix_ScanIterator.leafNode.prev<< std::endl;
+
+        if(ix_ScanIterator.leafNode.prev != 0){
+            std::cout<<"im in prev not 0"<<std::endl;
+            char prevPage[PAGE_SIZE];
+            iXFileHandle.iXReadPage(ix_ScanIterator.leafNode.prev, prevPage);
+            LeafNode prevLeafNode;
+            prevLeafNode.Deserialize(prevPage, attribute);
+            int index = findKey(&prevLeafNode, lowKey, attribute, GE_OP);
+            if(index != -1){
+                ix_ScanIterator.leafNode = prevLeafNode;
+                memcpy(ix_ScanIterator.currentPage, prevPage, PAGE_SIZE);
+                ix_ScanIterator.currentIndex = index;
+            }
+        }
 
         if (lowKeyInclusive)
             ix_ScanIterator.currentIndex = findKey(&ix_ScanIterator.leafNode, ix_ScanIterator.lowKey, attribute, GE_OP);

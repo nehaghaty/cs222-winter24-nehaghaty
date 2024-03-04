@@ -123,6 +123,8 @@ namespace PeterDB {
     public:
         std::vector<PeterDB::RID> rids; // Additional member for LeafNode
         PageNum next; // Sibling pointer
+        PageNum  prev;
+        PageNum pageNum;
 
 
         // Implementations of pure virtual functions
