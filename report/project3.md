@@ -78,7 +78,8 @@ There are two broad categories of splits:
 
 
 - Duplicate key span in a page
-
+1. Duplicates are handled by comparing RIDs together with keys during insertion and deletion. 
+2. While scanning, getNextEntry starts from the first occurrence of the key. 
 
 
 - Duplicate key span multiple pages (if applicable)
@@ -98,8 +99,8 @@ We have not added any .cc or .h file.
 ### 7. Member contribution (for team of two)
 - Explain how you distribute the workload in team.
 
-Sanket: insertEntry, deleteEntry, scan, getNextEntry
-Neha: insertEntry, scan, printBTree, create/destroy/open/close file
+- Sanket: insertEntry, deleteEntry, scan, getNextEntry
+- Neha: insertEntry, scan, printBTree, create/destroy/open/close file
 
 ### 8. Other (optional)
 - Freely use this section to tell us about things that are related to the project 3, but not related to the other sections (optional)
