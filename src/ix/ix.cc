@@ -66,12 +66,14 @@ namespace PeterDB {
 
     void readDummyHeadFromFile (IXFileHandle &iXFileHandle) {
         char hiddenPage[PAGE_SIZE];
+        memset(hiddenPage,0,PAGE_SIZE);
         iXFileHandle.iXReadPage(0, hiddenPage);
         memcpy(&iXFileHandle.dummyHead, hiddenPage,  sizeof(PageNum));
     }
 
     void writeDummyHeadToFile (IXFileHandle &iXFileHandle) {
         char hiddenPage[PAGE_SIZE];
+        memset(hiddenPage,0,PAGE_SIZE);
         memcpy(hiddenPage, &iXFileHandle.dummyHead, sizeof(PageNum));
         iXFileHandle.iXWritePage(0, hiddenPage);
     }
@@ -122,6 +124,7 @@ namespace PeterDB {
         if(iXFileHandle.fileHandle.getNumberOfPages() == 0){
             //create hidden page
             char hiddenPage[PAGE_SIZE];
+            memset(hiddenPage,0,PAGE_SIZE);
             memcpy(hiddenPage, &iXFileHandle.dummyHead, sizeof(PageNum));
             iXFileHandle.iXAppendPage(hiddenPage);
         }
@@ -649,11 +652,7 @@ namespace PeterDB {
 
     int findKeyDelete (LeafNode leafNode, const void *searchKey, const Attribute &attribute, const RID &rid) {
         if(attribute.type == PeterDB::TypeInt){
-            std::cout << "Finding Key to delete " << *(int*)searchKey << std::endl;
             for (int i = 0; i < leafNode.intKeys.size(); i++) {
-                std::cout << "Going through key " << leafNode.intKeys[i] << " with RID: " << leafNode.rids[i].pageNum
-                          << " " << leafNode.rids[i].slotNum << std::endl;
-
                 if(leafNode.intKeys[i] == *(int*)searchKey){
                     if (leafNode.rids[i].pageNum == rid.pageNum)
                         if (leafNode.rids[i].slotNum == rid.slotNum)
@@ -998,7 +997,7 @@ namespace PeterDB {
         void *smallestKey;
         insert(iXFileHandle.dummyHead, newChildPageNum, smallestKey,
                key, rid, iXFileHandle, attribute);
-
+        free(smallestKey);
         return 0;
     }
     void markKeyAsInvalid (LeafNode &leafNode, int index, const Attribute &attribute) {
@@ -1175,25 +1174,28 @@ namespace PeterDB {
     }
     RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
 
-        if (currentIndex == -1)
-            return IX_EOF;
+        int reqSatisfied = 0;
+        while (!reqSatisfied) {
+            if (currentIndex == -1)
+                return IX_EOF;
 
-        int keyTest = *(int*)key;
-        copyToReturnKey(key, rid, attribute, leafNode, currentIndex);
-        if (areYouHigh (key, highKey, highKeyInclusive, attribute))
-            return IX_EOF;
+            leafNode.Deserialize(currentPage, attribute);
+            if (currentIndex == leafNode.numKeys) {
+                if (leafNode.next == 0)
+                    currentIndex = -1;
+                else {
+                    ixFileHandle.iXReadPage(leafNode.next, currentPage);
 
-        currentIndex++;
-        if (currentIndex == leafNode.numKeys) {
-            if (leafNode.next == 0)
-                currentIndex = -1;
-            else {
-                char desPage [PAGE_SIZE];
-                ixFileHandle.iXReadPage(leafNode.next, desPage);
-                leafNode.Deserialize(desPage, attribute);
-
-                currentIndex = 0;
+                    currentIndex = 0;
+                }
+                continue;
             }
+            copyToReturnKey(key, rid, attribute, leafNode, currentIndex);
+            if (areYouHigh (key, highKey, highKeyInclusive, attribute))
+                return IX_EOF;
+
+            currentIndex++;
+            reqSatisfied = 1;
         }
         return 0;
     }
@@ -1222,12 +1224,16 @@ namespace PeterDB {
             return -1;
 
         char desPage [PAGE_SIZE];
-        iXFileHandle.iXReadPage(returnedPage, desPage);
-        ix_ScanIterator.leafNode.Deserialize(desPage, attribute);
+        iXFileHandle.iXReadPage(returnedPage, ix_ScanIterator.currentPage);
+        ix_ScanIterator.leafNode.Deserialize(ix_ScanIterator.currentPage, attribute);
+
         if (lowKeyInclusive)
             ix_ScanIterator.currentIndex = findKey(&ix_ScanIterator.leafNode, ix_ScanIterator.lowKey, attribute, GE_OP);
         else
             ix_ScanIterator.currentIndex = findKey(&ix_ScanIterator.leafNode, ix_ScanIterator.lowKey, attribute, GT_OP);
+
+        if (ix_ScanIterator.currentIndex == -1)
+            ix_ScanIterator.currentIndex = 0;
 
         return 0;
     }

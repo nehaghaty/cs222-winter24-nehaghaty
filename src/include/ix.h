@@ -183,6 +183,7 @@ namespace PeterDB {
         bool highKeyInclusive;
         IXFileHandle ixFileHandle;
         int currentIndex;
+        char currentPage[PAGE_SIZE];
 
         LeafNode leafNode;
         // Get next matching entry
