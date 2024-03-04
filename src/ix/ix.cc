@@ -75,7 +75,6 @@ namespace PeterDB {
         memcpy(hiddenPage, &iXFileHandle.dummyHead, sizeof(PageNum));
         iXFileHandle.iXWritePage(0, hiddenPage);
     }
-
     template<typename K>
     int findChildIndex(const std::vector<K>& keys, const K targetKey) {
         // This function finds the correct child index based on the target key
@@ -217,7 +216,6 @@ namespace PeterDB {
 
     int findKey (Node* node, const void *searchKey, const Attribute &attribute, CompOp compOp) {
         if(attribute.type == PeterDB::TypeInt){
-            std::cout << "Finding Key " << *(int*)searchKey << std::endl;
             for (int i = 0; i < node->intKeys.size(); i++) {
                 if (compOp == GE_OP) {
                     if(node->intKeys[i] >= *(int*)searchKey) {
@@ -248,9 +246,6 @@ namespace PeterDB {
                 int keyLen = *(int*)node->varcharKeys[i];
                 char keyVal[keyLen];
                 memcpy(keyVal, node->varcharKeys[i] + sizeof(keyLen), keyLen);
-//                std::cout << "Keys already present : " << keyVal[0] << " " << keyVal[keyLen-1] << std::endl;
-//                std::cout << "Searching key : " << *((char*)searchKey + 4) << " " << *((char*)searchKey + 4 + *(int*)searchKey) << std::endl;
-//                std::cout << "While finding " << keyLen << std::endl;
                 if (compOp == GE_OP) {
                     if (memcmp(node->varcharKeys[i], searchKey, keyLen + sizeof (keyLen)) >= 0)
                         return i;
@@ -316,7 +311,6 @@ namespace PeterDB {
                 }
                 internalNode.varcharKeys.insert(internalNode.varcharKeys.begin()+index, (char*)key);
                 return index;
-
         }
     }
 
@@ -404,14 +398,14 @@ namespace PeterDB {
     }
 
     int splitInternalNode (InternalNode &node1, InternalNode &node2,
-                         IXFileHandle &iXFileHandle, const Attribute& attribute) {
+                           IXFileHandle &iXFileHandle, const Attribute& attribute) {
         PageNum newInternalNodePage = iXFileHandle.iXgetNumberOfPages();
         //split keys
         unsigned numKeys = node1.numKeys;
         switch (attribute.type) {
             case TypeInt:
                 node2.intKeys = std::vector<int>(node1.intKeys.begin() + (numKeys/2),
-                                                     node1.intKeys.end());
+                                                 node1.intKeys.end());
 
                 // Erase the last 5 entries from the original vector
                 node1.intKeys.erase(node1.intKeys.begin() + (numKeys/2),
@@ -445,7 +439,7 @@ namespace PeterDB {
 
         // split children
         node2.children = std::vector<PageNum >(node1.children.begin() + node1.numKeys + 1,
-                                          node1.children.end());
+                                               node1.children.end());
         node1.children.erase(node1.children.begin() + node1.numKeys + 1 ,
                              node1.children.end());
 
@@ -514,8 +508,6 @@ namespace PeterDB {
         memset(data, 0, PAGE_SIZE);
         this->Serialize(data, attribute);
         ixFileHandle.iXAppendPage(data);
-
-
     }
 
     void* getSmallestKey (Node *node, const Attribute &attribute) {
@@ -526,7 +518,6 @@ namespace PeterDB {
                 memcpy(smallestKey, &node->floatKeys[0], sizeof (float));
                 if(!node->isLeaf){
                     node->floatKeys.erase(node->floatKeys.begin());
-                    node->numKeys--;
                 }
                 break;
             case TypeInt:
@@ -534,7 +525,6 @@ namespace PeterDB {
                 memcpy(smallestKey, &node->intKeys[0], sizeof (int));
                 if(!node->isLeaf){
                     node->intKeys.erase(node->intKeys.begin());
-                    node->numKeys--;
                 }
                 break;
             case TypeVarChar:
@@ -543,10 +533,11 @@ namespace PeterDB {
                 memcpy(smallestKey, node->varcharKeys[0], keyLen+sizeof(int));
                 if(!node->isLeaf){
                     node->varcharKeys.erase(node->varcharKeys.begin());
-                    node->numKeys--;
                 }
+                int keyLenTest = *(int*)smallestKey;
                 break;
         }
+        node->numKeys --;
         return smallestKey;
     }
 
@@ -631,7 +622,7 @@ namespace PeterDB {
                     internalNode.writeNodeToFile(attribute, nodePtr, iXFileHandle);
                 }
                 else {
-                    // internal node + no space
+                    // internal node + no space + non root = internal node split
                     InternalNode newInternalNode;
                     copyKeyToInternalVector(attribute, smallestKey, internalNode,
                                             -1, newChildEntry);
@@ -639,13 +630,6 @@ namespace PeterDB {
                     smallestKey = getSmallestKey(&newInternalNode, attribute);
                     internalNode.writeNodeToFile(attribute, nodePtr, iXFileHandle);
                     newInternalNode.appendNodeToFile(attribute, iXFileHandle);
-
-                    // testing
-//                    void* data[PAGE_SIZE];
-//                    iXFileHandle.iXReadPage(8, data);
-//                    InternalNode testNode;
-//                    testNode.Deserialize(data, attribute);
-//                    std::cout<<"test node: "<< testNode.isLeaf<<std::endl;
 
                     if(nodePtr == iXFileHandle.dummyHead){
                         // if the internal node split was a root = creation of new root
@@ -656,14 +640,8 @@ namespace PeterDB {
                         iXFileHandle.dummyHead = newRootPageNum;
                         writeDummyHeadToFile(iXFileHandle);
                         newRoot.appendNodeToFile(attribute, iXFileHandle);
-                    }
-                    //testing
-//                    void* data[PAGE_SIZE];
-//                    iXFileHandle.iXReadPage(8, data);
-//                    InternalNode testNode;
-//                    testNode.Deserialize(data, attribute);
-//                    std::cout<<"test node: "<< testNode.isLeaf<<std::endl;
 
+                    }
                 }
             }
         }
@@ -671,10 +649,10 @@ namespace PeterDB {
 
     int findKeyDelete (LeafNode leafNode, const void *searchKey, const Attribute &attribute, const RID &rid) {
         if(attribute.type == PeterDB::TypeInt){
-//            std::cout << "Finding Key to delete " << *(int*)searchKey << std::endl;
+            std::cout << "Finding Key to delete " << *(int*)searchKey << std::endl;
             for (int i = 0; i < leafNode.intKeys.size(); i++) {
-//                std::cout << "Going through key " << leafNode.intKeys[i] << " with RID: " << leafNode.rids[i].pageNum
-//                          << " " << leafNode.rids[i].slotNum << std::endl;
+                std::cout << "Going through key " << leafNode.intKeys[i] << " with RID: " << leafNode.rids[i].pageNum
+                          << " " << leafNode.rids[i].slotNum << std::endl;
 
                 if(leafNode.intKeys[i] == *(int*)searchKey){
                     if (leafNode.rids[i].pageNum == rid.pageNum)
@@ -710,7 +688,7 @@ namespace PeterDB {
     }
 
     int search(PageNum rootPtr, const void* key, IXFileHandle &iXFileHandle, const Attribute &attribute) {
-//        std::cout << "Searching Page " << rootPtr << std::endl;
+        std::cout << "Searching Page " << rootPtr << std::endl;
         void *desPage[PAGE_SIZE];
         memset(desPage, 0, PAGE_SIZE);
         iXFileHandle.iXReadPage(rootPtr, desPage);
@@ -1009,7 +987,7 @@ namespace PeterDB {
     }
 
     RC
-    IndexManager:: insertEntry(IXFileHandle &iXFileHandle, const Attribute &attribute, const void *key, const RID &rid) {
+    IndexManager::insertEntry(IXFileHandle &iXFileHandle, const Attribute &attribute, const void *key, const RID &rid) {
 
         if(iXFileHandle.dummyHead == -1){
             // create new b plus tree
@@ -1045,8 +1023,8 @@ namespace PeterDB {
     }
 
     RC deleteNode (PageNum nodePtr, const Attribute &attribute, IXFileHandle &iXFileHandle,
-                     const void* key, const RID &rid) {
-
+                   const void* key, const RID &rid) {
+        //TODO: read dummyHead from file
         readDummyHeadFromFile(iXFileHandle);
         char desPage[PAGE_SIZE];
         char sePage[PAGE_SIZE];
@@ -1140,7 +1118,7 @@ namespace PeterDB {
                 memcpy(key, &leafNode.floatKeys[currentIndex], sizeof (float));
                 break;
             case TypeVarChar:
-                size = *(int *) key;
+                size = *(int *) leafNode.varcharKeys[currentIndex];
                 size += sizeof(int);
                 memcpy(key, leafNode.varcharKeys[currentIndex], size);
                 break;
@@ -1193,13 +1171,14 @@ namespace PeterDB {
                 }
                 break;
         }
+        return false;
     }
-
     RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
 
         if (currentIndex == -1)
             return IX_EOF;
 
+        int keyTest = *(int*)key;
         copyToReturnKey(key, rid, attribute, leafNode, currentIndex);
         if (areYouHigh (key, highKey, highKeyInclusive, attribute))
             return IX_EOF;
@@ -1426,10 +1405,10 @@ namespace PeterDB {
     }
 
     RC IX_ScanIterator::close() {
-        if (lowKey)
-            free(lowKey);
-        if (highKey)
-            free(highKey);
+//        if (lowKey)
+//            free(lowKey);
+//        if (highKey)
+//            free(highKey);
 
         return 0;
     }
