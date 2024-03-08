@@ -80,15 +80,12 @@ namespace PeterDB {
                 } else {
                     fseek(file, 0, SEEK_SET);
                     fread(&fileHandle.totalPages, sizeof (int), 1, file);
-                    fseek(file, sizeof(int) + 1, SEEK_SET);
                     fread(&fileHandle.appendPageCounter, sizeof (int), 1, file);
-                    fseek(file, sizeof(int) * 2 + 1, SEEK_SET);
                     fread(&fileHandle.writePageCounter, sizeof (int), 1, file);
-                    fseek(file, sizeof(int) * 3 + 1, SEEK_SET);
                     fread(&fileHandle.readPageCounter, sizeof (int), 1, file);
                 }
                 return 0;
-                }
+            }
         }
         else {
             std::cout << "File does not exist" << std::endl;
