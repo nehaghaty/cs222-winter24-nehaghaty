@@ -270,7 +270,7 @@ namespace PeterDB {
                 char *slotEnd = slotPtr - (numSlots * SLOT_SIZE);
                 int offset2 = (*(short*) slotEnd) + (*(short*)(slotEnd + 2));
 
-                memmove(page + offset1 + recordSize, page + offset1, offset2 - offset1);
+                memmove(page + offset1 + recordSize, page + offset1, offset2 - offset1 + 1);
                 //update all the slots with offset + recordSize
                 char *slotUpdate = slotPtr - skipBytes - (2 * SLOT_SIZE);
                 for (int i = slotToInsert; i < numSlots - 1; i++) {
@@ -303,6 +303,7 @@ namespace PeterDB {
         //RID
         rid.pageNum = (unsigned)pageNum;
         rid.slotNum = (unsigned short)slotToInsert;
+
     }
 
     void processBitVector(std::vector<bool>& nullBitVector, int nullAttributesIndicatorSize, const void* bitArrayPointer) {
@@ -458,6 +459,7 @@ namespace PeterDB {
                 case PeterDB::TypeReal: { // float
                     // Since the size of int and float is the same, we can handle them in the same case
                     memcpy(dataPointer, recordPointer, sizeof(int));
+
                     recordPointer += sizeof(int);
                     dataPointer += sizeof(int);
                     offsetPointer += sizeof(OffsetLength);
@@ -523,7 +525,7 @@ namespace PeterDB {
         int startingOffset = recordOffset + recordLength;
         int endingOffset = NUM_SLOTS_OFFSET - (numSlots * SLOT_SIZE) - freeBytes;
         if((endingOffset - startingOffset) > 0){
-            memmove(page + recordOffset, page + startingOffset, endingOffset - startingOffset);
+            memmove(page + recordOffset, page + startingOffset, endingOffset - startingOffset + 1);
         }
 
         char *slotPointer = (page + NUM_SLOTS_OFFSET - (rid.slotNum + 1) * SLOT_SIZE);
@@ -732,14 +734,15 @@ namespace PeterDB {
             //left shift
             int startingOffset = oldRecordOffset + oldRecordLength;
             int endingOffset = NUM_SLOTS_OFFSET - (numSlots * SLOT_SIZE) - freeBytes;
-            int sizeToShift = endingOffset - startingOffset;
-            memmove(pageData + oldRecordOffset + updatedRecordLength, pageData + startingOffset, sizeToShift);
+            int sizeToShift = endingOffset - startingOffset + 1;
+            if (sizeToShift > 0)
+                memmove(pageData + oldRecordOffset + updatedRecordLength, pageData + startingOffset, sizeToShift);
             //copy updated record
             memcpy(pageData+oldRecordOffset, updatedRecord, updatedRecordLength);
             //update slots
             unsigned short shiftBytesCount = oldRecordLength - updatedRecordLength;
             char* slotPtr = pageData+NUM_SLOTS_OFFSET- (numSlots * SLOT_SIZE);
-            for(int i=0;i<(numSlots - (rid.slotNum+1));i++){
+            for(int i = 0 ; i < (numSlots - (rid.slotNum+1)) ; i++){
                 short currOffset = *(short*)slotPtr;
                 short newOffset = currOffset - shiftBytesCount;
                 memcpy(slotPtr, &newOffset, sizeof(SlotSubFieldLength));
@@ -747,6 +750,7 @@ namespace PeterDB {
             }
             // update length of updated record
             memcpy(slotPtr + sizeof(SlotSubFieldLength), &updatedRecordLength, sizeof(SlotSubFieldLength));
+            *(int*)(pageData + FREE_SPACE_OFFSET) = freeBytes + shiftBytesCount;
             if(isOldRecTombstone){
                 fileHandle.writePage(tsRid.pageNum, pageData);
             }
@@ -768,7 +772,7 @@ namespace PeterDB {
                 // right shift
                 int startingOffset = oldRecordOffset + oldRecordLength;
                 int endingOffset = NUM_SLOTS_OFFSET - (numSlots * SLOT_SIZE) - freeBytes;
-                int sizeToShift = endingOffset - startingOffset;
+                int sizeToShift = endingOffset - startingOffset + 1;
                 if(sizeToShift > 0){
                     memmove(pageData + oldRecordOffset + updatedRecordLength, pageData + startingOffset, sizeToShift);
                 }
@@ -784,6 +788,7 @@ namespace PeterDB {
                     slotPtr+=SLOT_SIZE;
                 }
                 // update length of updated record
+                *(int*)(pageData + FREE_SPACE_OFFSET) = freeBytes - shiftBytesCount;
                 memcpy(slotPtr + sizeof(SlotSubFieldLength), &updatedRecordLength, sizeof(SlotSubFieldLength));
                 if(isOldRecTombstone){
                     fileHandle.writePage(tsRid.pageNum, pageData);
@@ -808,7 +813,6 @@ namespace PeterDB {
                     fileHandle.writePage(rid.pageNum, tombStonePageData);
                 }
                 else{
-                    // create a tombstone
                     char* tombStone = new char[TOMBSTONE_SIZE];
                     char tombStoneByte;
                     encodeBytes(true, tombStoneByte);
@@ -819,8 +823,10 @@ namespace PeterDB {
                     // shift left
                     int startingOffset = oldRecordOffset + oldRecordLength;
                     int endingOffset = NUM_SLOTS_OFFSET - (numSlots * SLOT_SIZE) - freeBytes;
-                    int sizeToShift = endingOffset - startingOffset;
-                    memmove(pageData + oldRecordOffset + TOMBSTONE_SIZE, pageData + startingOffset, sizeToShift);
+                    int sizeToShift = endingOffset - startingOffset + 1;
+                    if (sizeToShift > 0)
+                        memmove(pageData + oldRecordOffset + TOMBSTONE_SIZE,
+                                    pageData + startingOffset, sizeToShift);
                     //copy tombstone
                     memcpy(pageData+oldRecordOffset, tombStone, TOMBSTONE_SIZE);
                     //update slots of successive record
@@ -835,14 +841,15 @@ namespace PeterDB {
                     // update length of updated record
                     int tsSize = TOMBSTONE_SIZE;
                     memcpy(slotPtr + sizeof(SlotSubFieldLength), &tsSize, sizeof(SlotSubFieldLength));
+                    *(int*)(pageData + FREE_SPACE_OFFSET) = freeBytes + shiftBytesCount;
                     fileHandle.writePage(rid.pageNum, pageData);
                     delete[] tombStone;
-
 
                 }
 
             }
         }
+
         delete[] tombStonePageData;
         delete[] tombstoneRecord;
         delete[] updatedRecord;
