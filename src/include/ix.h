@@ -81,6 +81,7 @@ namespace PeterDB {
         int freeSpace;
         unsigned numKeys;
         char isLeaf;
+        std::vector<PeterDB::RID> rids;
         std::vector<char*> varcharKeys; // Dynamic array of character pointers
         std::vector<int> intKeys;
         std::vector<float> floatKeys;
@@ -121,10 +122,10 @@ namespace PeterDB {
 // Derived class LeafNode
     class LeafNode : public Node {
     public:
-        std::vector<PeterDB::RID> rids; // Additional member for LeafNode
+//        std::vector<PeterDB::RID> rids; // Additional member for LeafNode
         PageNum next; // Sibling pointer
-        PageNum  prev;
-        PageNum pageNum;
+//        PageNum  prev;
+//        PageNum pageNum;
 
 
         // Implementations of pure virtual functions

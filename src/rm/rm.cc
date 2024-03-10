@@ -291,9 +291,7 @@ namespace PeterDB {
             while (rmsi.getNextTuple(rid, outBuffer) != RBFM_EOF) {
                 idCounter++;
             }
-            // rmsi.close();
-            std::cout<<"createTable after getnexttuple"<<std::endl;
-            std::cout<< "id counter" << idCounter << std::endl;
+
             void* tablesBuffer = malloc(100);
             RID newRid;
             prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, idCounter,
