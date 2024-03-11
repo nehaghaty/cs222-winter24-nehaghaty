@@ -332,7 +332,6 @@ namespace PeterDB {
             memset(outBuffer, 0, 1000);
             RID rid;
             int idCounter = 0;
-            // std::cout<<"createTable b4 getnexttuple"<<std::endl;
             while (rmsi.getNextTuple(rid, outBuffer) != RBFM_EOF) {
                 idCounter++;
             }
@@ -654,6 +653,55 @@ namespace PeterDB {
 
     // QE IX related
     RC RelationManager::createIndex(const std::string &tableName, const std::string &attributeName){
+        /*
+         * if(fileExists(tableName)){
+                std::cout<<"Table already exists"<<std::endl;
+                return -1;
+            }
+
+            //create a file for the table
+            RecordBasedFileManager::instance().createFile(tableName);
+
+            unsigned char *nullsIndicator = initializeNullFieldsIndicator(tablesRecordDescriptor);
+
+            // prepare Tables record
+            void *outBuffer = malloc(1000);
+            RM_ScanIterator rmsi;
+            std::vector<std::string> attributeNames {"table-id"};
+            scan(tablesFileName,"", PeterDB::NO_OP, nullptr, attributeNames, rmsi);
+            memset(outBuffer, 0, 1000);
+            RID rid;
+            int idCounter = 0;
+            while (rmsi.getNextTuple(rid, outBuffer) != RBFM_EOF) {
+                idCounter++;
+            }
+
+            void* tablesBuffer = malloc(100);
+            RID newRid;
+            prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, idCounter,
+                                tableName.length(), tableName, tableName.length(),
+                                tableName, tablesBuffer);
+            // insert record into Tables table
+            RecordBasedFileManager::instance().openFile(tablesFileName, tablesFileHandle);
+            RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, tablesBuffer, newRid);
+            RecordBasedFileManager::instance().closeFile(tablesFileHandle);
+            free(tablesBuffer);
+         */
+        if(fileExists(tableName)){
+            std::cout<<"Index already exists"<<std::endl;
+            return -1;
+        }
+        // insert into ix table
+
+        // ix:createFile
+        // check if table is empty
+            // if yes: return
+            // else: bulkload
+                // rm_scan table for index attr
+                // getNextTuple
+                    // store result in vector of tuples
+                    // sort with compareFunc
+                    // call IX insertEntry in loop
         return -1;
     }
 
