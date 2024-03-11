@@ -22,10 +22,13 @@ namespace PeterDB {
 
     FileHandle tablesFileHandle;
     FileHandle attrsFileHandle;
+    FileHandle indicesFileHandle;
     std::string tablesFileName = "Tables";
     std::string attrsFileName = "Columns";
+    std::string indicesFileName = "IX_Table";
     std::vector<PeterDB::Attribute> tablesRecordDescriptor;
     std::vector<PeterDB::Attribute> attrsRecordDescriptor;
+    std::vector<PeterDB::Attribute> indicesRecordDescriptor;
 
     bool canAccess(std::string tableName){
         if(tableName == tablesFileName || tableName == attrsFileName){
@@ -57,6 +60,13 @@ namespace PeterDB {
         addAttribute(recordDescriptor, "column-type", PeterDB::TypeInt, 4);
         addAttribute(recordDescriptor, "column-length", PeterDB::TypeInt, 4);
         addAttribute(recordDescriptor, "column-position", PeterDB::TypeInt, 4);
+    }
+
+    void createIndicesRecordDescriptor(std::vector<PeterDB::Attribute> &recordDescriptor) {
+        addAttribute(recordDescriptor, "table-id", PeterDB::TypeInt, 4);
+        addAttribute(recordDescriptor, "index-name", PeterDB::TypeVarChar, 50);
+        addAttribute(recordDescriptor, "attr-type", PeterDB::TypeInt, 4);
+        addAttribute(recordDescriptor, "index-filename", PeterDB::TypeVarChar, 50);
     }
 
     static unsigned char *initializeNullFieldsIndicator(const std::vector<PeterDB::Attribute> &recordDescriptor) {
@@ -147,7 +157,7 @@ namespace PeterDB {
 
     RC RelationManager::createCatalog() {
 
-//        create files and record descriptors for Tables table and Attributes table
+        // create files and record descriptors for Tables table, Attributes table and IX_Table
         RecordBasedFileManager::instance().createFile(tablesFileName);
         RecordBasedFileManager::instance().openFile(tablesFileName, tablesFileHandle);
         createTableRecordDescriptor(tablesRecordDescriptor);
@@ -156,25 +166,35 @@ namespace PeterDB {
         RecordBasedFileManager::instance().openFile(attrsFileName, attrsFileHandle);
         createAttrRecordDescriptor(attrsRecordDescriptor);
 
+        RecordBasedFileManager::instance().createFile(indicesFileName);
+        RecordBasedFileManager::instance().openFile(indicesFileName, indicesFileHandle);
+        createIndicesRecordDescriptor(indicesRecordDescriptor);
+
         /********************
         * Tables table *
         *********************/
-//         prepare records
+        // prepare records
         unsigned char *nullsIndicator = initializeNullFieldsIndicator(tablesRecordDescriptor);
         void* tablesBuffer = malloc(100);
         void* attrsBuffer = malloc(100);
+        void* indicesBuffer = malloc(100);
         prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, 0, tablesFileName.length(),
                             tablesFileName, tablesFileName.length(), tablesFileName, tablesBuffer);
         prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, 1, attrsFileName.length(),
                             attrsFileName, attrsFileName.length(), attrsFileName, attrsBuffer);
+        prepareTablesRecord(tablesFileName.size(), nullsIndicator, 2, indicesFileName.length(),
+                            indicesFileName, indicesFileName.length(), indicesFileName, indicesBuffer);
 
-//         insert records
+        // insert records
         RID tablesRid;
         RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, tablesBuffer, tablesRid);
         RID attrsRid;
         RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, attrsBuffer, attrsRid);
+        RID ixRid;
+        RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, indicesBuffer, ixRid);
         free(tablesBuffer);
         free(attrsBuffer);
+        free(indicesBuffer);
 
         /********************
         * Attributes table *
@@ -186,11 +206,8 @@ namespace PeterDB {
         prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 0, 10, "table-name", PeterDB::TypeVarChar,50, 2, nameRecBuf);
         void* filenameRecBuf = malloc(100);
         prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 0, 9, "file-name", PeterDB::TypeVarChar, 50, 3, filenameRecBuf);
-        //std::cout << "After preparing " << *((char*)filenameRecBuf + 16) << std::endl;
 
-
-//         insert Tables records into Attributes table
-//        std::cout << "Inserting tables records " << std::endl;
+        // insert Tables records into Attributes table
         RID idRid;
         RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, idRecBuf, idRid);
         RID nameRid;
@@ -202,7 +219,7 @@ namespace PeterDB {
         free(nameRecBuf);
         free(filenameRecBuf);
 
-//         prepare Attributes records
+        // prepare Attributes records
         void* tableIdRecBuf = malloc(100);
         prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 1, 8,"table-id", PeterDB::TypeInt, 4, 1, tableIdRecBuf);
         void* attrNameRecBuf = malloc(100);
@@ -216,7 +233,7 @@ namespace PeterDB {
 
         // insert Attributes records into Attributes table
         RID tableIdRid;
-        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, tableIdRecBuf, tablesRid);
+        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, tableIdRecBuf, tableIdRid);
         RID attrNameRid;
         RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrNameRecBuf, attrNameRid);
         RID attrTypeRid;
@@ -231,6 +248,34 @@ namespace PeterDB {
         free(attrTypeRecBuf);
         free(attrLenRecBuf);
         free(positionRecBuf);
+
+        // prepare IX_Table records
+        void* tidRecBuf = malloc(100);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 2, 8,"table-id", PeterDB::TypeInt, 4, 1, tidRecBuf);
+        void* ixNameRecBuf = malloc(100);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 2, 10, "index-name", PeterDB::TypeVarChar, 50, 2, ixNameRecBuf);
+        void* ixAttrTypeRecBuf = malloc(100);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 2, 9, "attr-type", PeterDB::TypeInt, 4, 3, ixAttrTypeRecBuf);
+        void* ixFileNameRecBuf = malloc(100);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 2, 14, "index-filename", PeterDB::TypeVarChar, 50, 4, ixFileNameRecBuf);
+
+        // insert IX_Table records into Attributes table
+        RID tidRid;
+        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, tableIdRecBuf, tidRid);
+        RID ixNameRid;
+        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrNameRecBuf, ixNameRid);
+        RID ixAttrTypeRid;
+        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrTypeRecBuf, ixAttrTypeRid);
+        RID ixFilenameRid;
+        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrLenRecBuf, ixFilenameRid);
+
+
+        free(tidRecBuf);
+        free(ixNameRecBuf);
+        free(ixAttrTypeRecBuf);
+        free(ixFileNameRecBuf);
+
+
         RecordBasedFileManager::instance().closeFile(tablesFileHandle);
         RecordBasedFileManager::instance().closeFile(attrsFileHandle);
         delete[] nullsIndicator;
