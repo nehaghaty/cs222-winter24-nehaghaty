@@ -1,4 +1,5 @@
 #include "src/include/rm.h"
+#include "src/include/ix.h"
 #include <iostream>
 #include <cstring>
 #include <sys/stat.h>
@@ -64,7 +65,7 @@ namespace PeterDB {
 
     void createIndicesRecordDescriptor(std::vector<PeterDB::Attribute> &recordDescriptor) {
         addAttribute(recordDescriptor, "table-id", PeterDB::TypeInt, 4);
-        addAttribute(recordDescriptor, "index-name", PeterDB::TypeVarChar, 50);
+        addAttribute(recordDescriptor, "attr-name", PeterDB::TypeVarChar, 50);
         addAttribute(recordDescriptor, "attr-type", PeterDB::TypeInt, 4);
         addAttribute(recordDescriptor, "index-filename", PeterDB::TypeVarChar, 50);
     }
@@ -108,7 +109,6 @@ namespace PeterDB {
         memcpy((char *) buffer + offset, &fileNameLength, sizeof(int));
         offset += sizeof(int);
         memcpy((char *) buffer + offset, fileName.c_str(), fileNameLength);
-        offset += fileNameLength;
     }
 
     static void prepareAttrsRecord(size_t fieldCount,
@@ -121,7 +121,6 @@ namespace PeterDB {
                                    const int position,
                                    void *buffer) {
         int offset = 0;
-        //std::cout << attrName << " " << attrType << std::endl;
         // Null-indicators
         int nullFieldsIndicatorActualSize = ceil((double) fieldCount / CHAR_BIT);
 
@@ -153,6 +152,45 @@ namespace PeterDB {
         // position field
         memcpy((char *) buffer + offset, &position, sizeof(int));
         offset += sizeof(int);
+    }
+
+    static void prepareIxRecord(size_t fieldCount,
+                                   unsigned char *nullFieldsIndicator,
+                                   const int tableId,
+                                   const int attrNameLength,
+                                   const std::string &attrName,
+                                   const int attrType,
+                                   const int indexFilenameLength,
+                                   const std::string &indexFileName,
+                                   void *buffer) {
+        int offset = 0;
+        // Null-indicators
+        int nullFieldsIndicatorActualSize = ceil((double) fieldCount / CHAR_BIT);
+
+        // Null-indicator for the fields
+        memcpy((char *) buffer + offset, nullFieldsIndicator,
+               nullFieldsIndicatorActualSize);
+        offset += nullFieldsIndicatorActualSize;
+
+        // table id field
+        memcpy((char *) buffer + offset, &tableId, sizeof(int));
+        offset += sizeof(int);
+
+        // attribute name field
+        memcpy((char *) buffer + offset, &attrNameLength, sizeof(int));
+        offset += sizeof(int);
+        memcpy((char *) buffer + offset, attrName.c_str(), attrNameLength);
+        offset += attrNameLength;
+
+        // attribute type field
+        memcpy((char *) buffer + offset, &attrType, sizeof(int));
+        offset += sizeof(int);
+
+        // index filename field
+        memcpy((char *) buffer + offset, &indexFilenameLength, sizeof(int));
+        offset += sizeof(int);
+        memcpy((char *) buffer + offset, indexFileName.c_str(), indexFilenameLength);
+
     }
 
     RC RelationManager::createCatalog() {
@@ -252,8 +290,8 @@ namespace PeterDB {
         // prepare IX_Table records
         void* tidRecBuf = malloc(100);
         prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 2, 8,"table-id", PeterDB::TypeInt, 4, 1, tidRecBuf);
-        void* ixNameRecBuf = malloc(100);
-        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 2, 10, "index-name", PeterDB::TypeVarChar, 50, 2, ixNameRecBuf);
+        void* ixAttrNameRecBuf = malloc(100);
+        prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 2, 9, "attr-name", PeterDB::TypeVarChar, 50, 2, ixAttrNameRecBuf);
         void* ixAttrTypeRecBuf = malloc(100);
         prepareAttrsRecord(attrsRecordDescriptor.size(), nullsIndicator, 2, 9, "attr-type", PeterDB::TypeInt, 4, 3, ixAttrTypeRecBuf);
         void* ixFileNameRecBuf = malloc(100);
@@ -263,7 +301,7 @@ namespace PeterDB {
         RID tidRid;
         RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, tableIdRecBuf, tidRid);
         RID ixNameRid;
-        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrNameRecBuf, ixNameRid);
+        RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, ixAttrNameRecBuf, ixNameRid);
         RID ixAttrTypeRid;
         RecordBasedFileManager::instance().insertRecord(attrsFileHandle, attrsRecordDescriptor, attrTypeRecBuf, ixAttrTypeRid);
         RID ixFilenameRid;
@@ -271,7 +309,7 @@ namespace PeterDB {
 
 
         free(tidRecBuf);
-        free(ixNameRecBuf);
+        free(ixAttrNameRecBuf);
         free(ixAttrTypeRecBuf);
         free(ixFileNameRecBuf);
 
@@ -492,7 +530,6 @@ namespace PeterDB {
             memset(outBuffer, 0, 1000);
         }
         rmScanIterator_attribute.close();
-        // std::cout<<"getAttr after getnexttuple 2"<<std::endl;
         free(outBuffer);
         free(value);
         return 0;
@@ -651,58 +688,118 @@ namespace PeterDB {
         return -1;
     }
 
-    // QE IX related
-    RC RelationManager::createIndex(const std::string &tableName, const std::string &attributeName){
-        /*
-         * if(fileExists(tableName)){
-                std::cout<<"Table already exists"<<std::endl;
-                return -1;
-            }
+    RC RelationManager::findTableID (const std::string &tableName, int &id) {
 
-            //create a file for the table
-            RecordBasedFileManager::instance().createFile(tableName);
+        RM_ScanIterator rmsi;
+        std::string conditionAttribute = "table-name";
+        PeterDB::CompOp compOp = PeterDB::EQ_OP;
+        std::vector<std::string> attributeNames{"table-id"};
 
-            unsigned char *nullsIndicator = initializeNullFieldsIndicator(tablesRecordDescriptor);
+        void *value = malloc(tableName.length() + sizeof(int));
+        int tableNameLength = tableName.length();
+        memcpy(value, &tableNameLength, sizeof(int));
+        memcpy((char *) value + sizeof(int), tableName.c_str(), tableName.length());
 
-            // prepare Tables record
-            void *outBuffer = malloc(1000);
-            RM_ScanIterator rmsi;
-            std::vector<std::string> attributeNames {"table-id"};
-            scan(tablesFileName,"", PeterDB::NO_OP, nullptr, attributeNames, rmsi);
-            memset(outBuffer, 0, 1000);
-            RID rid;
-            int idCounter = 0;
-            while (rmsi.getNextTuple(rid, outBuffer) != RBFM_EOF) {
-                idCounter++;
-            }
+        scan(tablesFileName, conditionAttribute, compOp, value, attributeNames, rmsi);
 
-            void* tablesBuffer = malloc(100);
-            RID newRid;
-            prepareTablesRecord(tablesRecordDescriptor.size(), nullsIndicator, idCounter,
-                                tableName.length(), tableName, tableName.length(),
-                                tableName, tablesBuffer);
-            // insert record into Tables table
-            RecordBasedFileManager::instance().openFile(tablesFileName, tablesFileHandle);
-            RecordBasedFileManager::instance().insertRecord(tablesFileHandle, tablesRecordDescriptor, tablesBuffer, newRid);
-            RecordBasedFileManager::instance().closeFile(tablesFileHandle);
-            free(tablesBuffer);
-         */
-        if(fileExists(tableName)){
-            std::cout<<"Index already exists"<<std::endl;
+        RID tempRID;
+
+        void *outBuffer = malloc(1000);
+        if (rmsi.getNextTuple(tempRID, outBuffer) == RBFM_EOF){
             return -1;
         }
-        // insert into ix table
+        memcpy(&id, (char *) outBuffer + 1, sizeof(int));
+
+        rmsi.close();
+        return 0;
+    }
+
+    template<typename KeyType>
+    void bulkLoad(const std::string &tableName, const std::string &attributeName, IXFileHandle ixFileHandle, Attribute attr){
+        RM_ScanIterator rmsi;
+        RID getNextRid;
+        char outBuffer[PAGE_SIZE];
+        std::vector<std::string> attributeNames {attributeName};
+        RelationManager::instance().scan(tableName, "", PeterDB::NO_OP, nullptr, attributeNames, rmsi);
+
+        std::vector<std::tuple<KeyType, PeterDB::RID>> combined;
+        while (rmsi.getNextTuple(getNextRid, outBuffer) != RBFM_EOF){
+            KeyType attrValue = *(KeyType*)outBuffer;
+            combined.push_back(std::make_tuple(attrValue, getNextRid));
+        }
+        sort(combined.begin(), combined.end(), IndexManager::instance().compareFunction<KeyType>);
+
+        for(auto entry : combined){
+            void* key = static_cast<void*>(&std::get<0>(entry));
+            IndexManager::instance().insertEntry(ixFileHandle, attr, key, std::get<1>(entry));
+        }
+
+    }
+
+    // QE IX related
+    RC RelationManager::createIndex(const std::string &tableName, const std::string &attributeName){
 
         // ix:createFile
+        //ix:createFile for index
+        std::string ixFilename = tableName + "_" + attributeName + ".idx";
+        IndexManager::instance().createFile(ixFilename);
+        IXFileHandle ixFileHandle;
+        IndexManager::instance().openFile(ixFilename, ixFileHandle);
+
+        //find table id in tables table
+        int tableId = -1;
+        findTableID(tableName, tableId);
+
+        if(tableId == -1){
+            std::cout<<"Table not found." <<std::endl;
+            return -1;
+
+        }
+        //get attribute type
+        AttrType ixAttrType;
+        Attribute ixAttr;
+        std::vector<PeterDB::Attribute> attrs;
+        getAttributes(tableName, attrs);
+
+        for(const auto& attr: attrs){
+            if(attr.name == attributeName){
+                ixAttr = attr;
+                ixAttrType = attr.type;
+            }
+        }
+
+        // insert into IX_Table
+        void *indicesBuffer = malloc(100);
+        unsigned char *nullsIndicator = initializeNullFieldsIndicator(tablesRecordDescriptor);
+
+        prepareIxRecord(indicesRecordDescriptor.size(), nullsIndicator, tableId, attributeName.length(),
+                        attributeName, ixAttrType, ixFilename.length(), ixFilename, indicesBuffer);
+
+        // insert record into IX_Table
+        RID ixRid;
+        RecordBasedFileManager::instance().openFile(indicesFileName, indicesFileHandle);
+        RecordBasedFileManager::instance().insertRecord(indicesFileHandle, indicesRecordDescriptor,
+                                                        indicesBuffer, ixRid);
+        RecordBasedFileManager::instance().closeFile(indicesFileHandle);
+
         // check if table is empty
-            // if yes: return
-            // else: bulkload
-                // rm_scan table for index attr
-                // getNextTuple
-                    // store result in vector of tuples
-                    // sort with compareFunc
-                    // call IX insertEntry in loop
-        return -1;
+        switch (ixAttrType) {
+            case TypeInt:
+                bulkLoad<int>(tableName, attributeName, ixFileHandle, ixAttr);
+                break;
+
+            case TypeReal:
+                bulkLoad<float>(tableName, attributeName, ixFileHandle, ixAttr);
+                break;
+
+            case TypeVarChar:
+                bulkLoad<char*>(tableName, attributeName, ixFileHandle, ixAttr);
+                break;
+        }
+
+        IndexManager::instance().closeFile(ixFileHandle);
+
+        return 0;
     }
 
     RC RelationManager::destroyIndex(const std::string &tableName, const std::string &attributeName){
