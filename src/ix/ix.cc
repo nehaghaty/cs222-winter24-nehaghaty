@@ -16,9 +16,7 @@ typedef char        isLeafIndicator;
 #define FREE_SPACE_OFFSET   (PAGE_SIZE - FREE_SPACE_BYTES - 1)
 #define NUM_KEYS_OFFSET     (FREE_SPACE_OFFSET - NUM_KEYS_BYTES)
 #define IS_LEAF_OFFSET      (NUM_KEYS_OFFSET - IS_LEAF_BYTES)
-#define SIB_PTR_OFFSET             (IS_LEAF_OFFSET - SIBLING_BYTES)
-#define LEFT_PTR_OFFSET             (SIB_PTR_OFFSET - SIBLING_BYTES)
-#define PAGE_NUM_OFFSET             (LEFT_PTR_OFFSET - SIBLING_BYTES)
+#define SIB_PTR_OFFSET       (IS_LEAF_OFFSET - SIBLING_BYTES)
 
 
 namespace PeterDB {
@@ -202,47 +200,6 @@ namespace PeterDB {
         }
     }
 
-    template<typename KeyType>
-    bool compareFunction (const std::tuple<KeyType, RID>& lhs, const std::tuple<KeyType, RID>& rhs) {
-
-        if (std::get<0>(lhs) != std::get<0>(rhs)) {
-            return std::get<0>(lhs) < std::get<0>(rhs);
-        }
-
-        else if (std::get<1>(lhs).pageNum != std::get<1>(rhs).pageNum) {
-
-            return std::get<1>(lhs).pageNum < std::get<1>(rhs).pageNum;
-        } else {
-            return std::get<1>(lhs).slotNum < std::get<1>(rhs).slotNum;
-        }
-    }
-
-    template<>
-    bool compareFunction<char*> (const std::tuple<char*, RID>& lhs, const std::tuple<char*, RID>& rhs) {
-
-        char *key1 = std::get<0>(lhs);
-        char *key2 = std::get<0>(rhs);
-        int keyLen1 = *(int*)key1;
-        int keyLen2 = *(int*)key2;
-
-        std::string keyStr1(key1 + sizeof (int), keyLen1);
-        std::string keyStr2(key2 + sizeof (int), keyLen2);
-
-        if (keyStr1 != keyStr2) {
-
-            return (keyStr1 < keyStr2);
-        }
-
-        else if (std::get<1>(lhs).pageNum != std::get<1>(rhs).pageNum) {
-
-            return std::get<1>(lhs).pageNum < std::get<1>(rhs).pageNum;
-        } else {
-
-            return std::get<1>(lhs).slotNum < std::get<1>(rhs).slotNum;
-        }
-    }
-
-
     template<typename K>
     int findChildIndex(const std::vector<K>& keys, const K targetKey, const RID &targetRid, std::vector<RID>& rids) {
         // This function finds the correct child index based on the target key
@@ -329,7 +286,7 @@ namespace PeterDB {
         for (int i = 0; i < Keys.size(); i++) {
             combined.push_back(std::make_tuple(Keys[i], rids[i]));
         }
-        sort(combined.begin(), combined.end(), compareFunction<KeyType>);
+        sort(combined.begin(), combined.end(), IndexManager::instance().compareFunction<KeyType>);
 
         Keys.clear();
         rids.clear();
@@ -1488,6 +1445,47 @@ namespace PeterDB {
 
         printNode(rootNode, attribute, out, iXFileHandle);
         return 0;
+    }
+
+    template<typename KeyType>
+    bool IndexManager::compareFunction(const std::tuple<KeyType, RID> &lhs, const std::tuple<KeyType, RID> &rhs) {
+
+        if (std::get<0>(lhs) != std::get<0>(rhs)) {
+            return std::get<0>(lhs) < std::get<0>(rhs);
+        }
+
+        else if (std::get<1>(lhs).pageNum != std::get<1>(rhs).pageNum) {
+
+            return std::get<1>(lhs).pageNum < std::get<1>(rhs).pageNum;
+        }
+        else {
+            return std::get<1>(lhs).slotNum < std::get<1>(rhs).slotNum;
+        }
+    }
+
+    template<>
+    bool IndexManager::compareFunction<char*>(const std::tuple<char*, RID> &lhs, const std::tuple<char*, RID> &rhs) {
+
+        char *key1 = std::get<0>(lhs);
+        char *key2 = std::get<0>(rhs);
+        int keyLen1 = *(int*)key1;
+        int keyLen2 = *(int*)key2;
+
+        std::string keyStr1(key1 + sizeof (int), keyLen1);
+        std::string keyStr2(key2 + sizeof (int), keyLen2);
+
+        if (keyStr1 != keyStr2) {
+
+            return (keyStr1 < keyStr2);
+        }
+        else if (std::get<1>(lhs).pageNum != std::get<1>(rhs).pageNum) {
+
+            return std::get<1>(lhs).pageNum < std::get<1>(rhs).pageNum;
+        }
+        else {
+
+            return std::get<1>(lhs).slotNum < std::get<1>(rhs).slotNum;
+        }
     }
 
     IX_ScanIterator::IX_ScanIterator() {

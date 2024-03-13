@@ -1010,7 +1010,6 @@ namespace PeterDB {
         std::vector<int> positions (selectedFieldSize);
         for(int i=0; i < selectedFieldSize; i++){
             positions[i] = attributePositions[attributeNames[i]];
-            //std::cout << attributeNames[i] << positions[i] << std::endl;
         }
         // std::sort(positions.begin(), positions.begin() + selectedFieldSize);
         for (int i = 0; i < selectedFieldSize; ++i) {
@@ -1048,7 +1047,6 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
 
         int newBitVectorSize = getActualByteForNullsIndicator(attributeNames.size());
         int total_size = newBitVectorSize;
-        // std::cout<< "nbvs "<< newBitVectorSize << " obvs "<< originalBitVectorSize<<std::endl;
 
         for (auto attributeName : attributeNames) {
             int i = attributePositions[attributeName];

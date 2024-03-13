@@ -426,7 +426,7 @@ namespace PeterDBTesting {
         createLargeTable(tableName);
 
         inBuffer = malloc(bufSize);
-        int numTuples = 1;
+        int numTuples = 5000;
 
         // GetAttributes
         ASSERT_EQ(rm.getAttributes(tableName, attrs), success) << "RelationManager::getAttributes() should succeed.";
@@ -459,7 +459,7 @@ namespace PeterDBTesting {
         // 1. read tuple
 
         size_t size = 0;
-        int numTuples = 1;
+        int numTuples = 5000;
         inBuffer = malloc(bufSize);
         outBuffer = malloc(bufSize);
 
@@ -476,7 +476,7 @@ namespace PeterDBTesting {
         for (int i = 0; i < numTuples; i++) {
             memset(inBuffer, 0, bufSize);
             memset(outBuffer, 0, bufSize);
-            std::cout<< "rid " << i << "page: "<<rids[i].pageNum<<" slot: "<<rids[i].slotNum<<std::endl;
+
             ASSERT_EQ(rm.readTuple(tableName, rids[i], outBuffer), success)
                                         << "RelationManager::readTuple() should succeed.";
 
@@ -631,7 +631,7 @@ namespace PeterDBTesting {
         };
 
         ASSERT_EQ(rm.scan(tableName, "", PeterDB::NO_OP, nullptr, attrs, rmsi), success) <<
-                                                                                      "RelationManager::scan() should succeed.";
+                                                                                         "RelationManager::scan() should succeed.";
 
         unsigned count = 0;
         outBuffer = malloc(bufSize);

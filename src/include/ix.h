@@ -65,8 +65,13 @@ namespace PeterDB {
         // Print the B+ tree in pre-order (in a JSON record format)
         RC printBTree(IXFileHandle &ixFileHandle, const Attribute &attribute, std::ostream &out) const;
 
+        template<typename KeyType>
+        static bool compareFunction (const std::tuple<KeyType, RID>& lhs, const std::tuple<KeyType, RID>& rhs);
 
-    protected:
+        template<>
+         bool compareFunction<char*> (const std::tuple<char*, RID>& lhs, const std::tuple<char*, RID>& rhs);
+
+            protected:
         IndexManager() = default;                                                   // Prevent construction
         ~IndexManager() = default;                                                  // Prevent unwanted destruction
         IndexManager(const IndexManager &) = default;                               // Prevent construction by copying

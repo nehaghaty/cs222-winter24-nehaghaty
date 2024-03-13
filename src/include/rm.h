@@ -90,6 +90,8 @@ namespace PeterDB {
                      bool highKeyInclusive,
                      RM_IndexScanIterator &rm_IndexScanIterator);
 
+        RC findTableID(const std::string &tableName, int &id);
+
     protected:
         RelationManager();                                                  // Prevent construction
         ~RelationManager();                                                 // Prevent unwanted destruction
