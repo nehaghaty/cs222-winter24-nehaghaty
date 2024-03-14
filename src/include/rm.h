@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "src/include/rbfm.h"
+#include "src/include/ix.h"
 
 namespace PeterDB {
 #define RM_EOF (-1)  // end of a scan operator
@@ -29,6 +30,7 @@ namespace PeterDB {
         ~RM_IndexScanIterator();    // Destructor
 
         // "key" follows the same format as in IndexManager::insertEntry()
+        PeterDB::IX_ScanIterator IX_Scan_Iterator;
         RC getNextEntry(RID &rid, void *key);    // Get next matching entry
         RC close();                              // Terminate index scan
     };

@@ -74,9 +74,9 @@ namespace PeterDB {
         };
 
         // Start a new iterator given the new compOp and value
-        void setIterator() {
+        void setIterator(CompOp compOp, const std::string &conditionAttribute, const void *value, std::vector<std::string> attrNames) {
             iter.close();
-            rm.scan(tableName, "", NO_OP, NULL, attrNames, iter);
+            rm.scan(tableName, conditionAttribute, compOp, value, attrNames, iter);
         };
 
         RC getNextTuple(void *data) override {
@@ -92,6 +92,19 @@ namespace PeterDB {
                 attribute.name = tableName + "." + attribute.name;
             }
             return 0;
+        };
+
+        RC getAttributesVanilla(std::vector<std::string> &attrNames) {
+            attrNames.clear();
+
+            for (Attribute &attribute : this->attrs) {
+                attrNames.push_back(attribute.name);
+            }
+            return 0;
+        };
+
+        std::string getTableName(){
+            return tableName;
         };
 
         ~TableScan() override {
@@ -157,6 +170,14 @@ namespace PeterDB {
     };
 
     class Filter : public Iterator {
+        CompOp compOp;
+        std::string lhsAttr;
+        Value rhsValue;
+        Iterator *input;
+        Condition condition;
+        TableScan *tableScan;
+        IndexScan *indexScan;
+        std::string tableName;
         // Filter operator
     public:
         Filter(Iterator *input,               // Iterator of input R
