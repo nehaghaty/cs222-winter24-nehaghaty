@@ -38,6 +38,16 @@ namespace PeterDB {
         return true;
     }
 
+    static void findPositionInRD (std::vector<Attribute> &attrs, int &position, std::string &attributeName) {
+        position = 0;
+        int i;
+        for (i = 0; i < attrs.size(); i++) {
+            if (attrs[i].name == attributeName)
+                break;
+        }
+        position = i;
+    }
+
     void addAttribute(std::vector<PeterDB::Attribute> &recordDescriptor,
                       const std::string &name,
                       PeterDB::AttrType type,
@@ -400,7 +410,6 @@ namespace PeterDB {
             }
             delete[] nullsIndicator;
 
-
         }
         else{
             std::cout<<"Catalog does not exist, cannot create table"<<std::endl;
@@ -409,7 +418,6 @@ namespace PeterDB {
         return 0;
     }
 
-
     RC RelationManager::deleteTable(const std::string &tableName) {
         if(!canAccess(tableName)) {
             return -1;
@@ -417,7 +425,6 @@ namespace PeterDB {
 
         // delete file
         // delete record
-
 
         //get the id of the table name from Tables
         std::string conditionAttribute = "table-name";
@@ -468,11 +475,18 @@ namespace PeterDB {
             memset(outBuffer, 0, 1000);
         }
         RecordBasedFileManager::instance().destroyFile(tableName);
+
+        //delete indices of the table
+
+        std::vector<std::tuple<std::string, std::string>> indices;
+        getIndices(id, indices);
+        for (auto index: indices) {
+            destroyIndex(tableName, std::get<0>(index));
+        }
         rmScanIterator2.close();
         free(outBuffer);
         return 0;
     }
-
 
     RC RelationManager::getAttributes(const std::string &tableName, std::vector<Attribute> &attrs) {
 
@@ -535,6 +549,75 @@ namespace PeterDB {
         return 0;
     }
 
+    RC RelationManager::findTableID (const std::string &tableName, int &id) {
+
+        RM_ScanIterator rmsi;
+        std::string conditionAttribute = "table-name";
+        PeterDB::CompOp compOp = PeterDB::EQ_OP;
+        std::vector<std::string> attributeNames{"table-id"};
+
+        void *value = malloc(tableName.length() + sizeof(int));
+        int tableNameLength = tableName.length();
+        memcpy(value, &tableNameLength, sizeof(int));
+        memcpy((char *) value + sizeof(int), tableName.c_str(), tableName.length());
+
+        scan(tablesFileName, conditionAttribute, compOp, value, attributeNames, rmsi);
+
+        RID tempRID;
+
+        void *outBuffer = malloc(1000);
+        if (rmsi.getNextTuple(tempRID, outBuffer) == RBFM_EOF){
+            return -1;
+        }
+        memcpy(&id, (char *) outBuffer + 1, sizeof(int));
+
+        rmsi.close();
+        return 0;
+    }
+
+    void extractIndices (std::vector<std::tuple<std::string, std::string>> &indices, void *outBuffer) {
+        char *dataPointer = (char*)outBuffer;
+
+        int sizeIndex = *(int*)dataPointer;
+        dataPointer += sizeof (sizeIndex);
+
+        std::string indexName(dataPointer, sizeIndex);
+        dataPointer += sizeIndex;
+
+        int sizeIndexFileName = *(int*)dataPointer;
+        dataPointer += sizeof (sizeIndexFileName);
+
+        std::string indexFileName(dataPointer, sizeIndexFileName);
+
+        indices.push_back(std::make_tuple(indexName, indexFileName));
+    }
+
+    RC RelationManager::getIndices (const int &tableID, std::vector<std::tuple<std::string, std::string>> &indices) {
+        RM_ScanIterator rmsi;
+        std::string conditionAttribute = "table-id";
+        PeterDB::CompOp compOp = PeterDB::EQ_OP;
+
+        std::vector<std::string> attributeNames{"attr-name", "index-filename"};
+
+        scan(indicesFileName, conditionAttribute, compOp, &tableID, attributeNames, rmsi);
+
+        RID tempRID;
+
+        void *outBuffer = malloc(1000);
+        std::vector<PeterDB::Attribute > recordDescriptor;
+        PeterDB::addAttribute(recordDescriptor, "attr-name", PeterDB::TypeVarChar, 50);
+        PeterDB::addAttribute(recordDescriptor, "index-filename", PeterDB::TypeVarChar, 50);
+
+        while (rmsi.getNextTuple(tempRID, outBuffer) != RBFM_EOF) {
+            printTuple(recordDescriptor, outBuffer, std::cout);
+            extractIndices (indices, outBuffer);
+        }
+
+        rmsi.close();
+        free(outBuffer);
+        return 0;
+    }
+
     RC RelationManager::insertTuple(const std::string &tableName, const void *data, RID &rid) {
         if(!canAccess(tableName)) {
             return -1;
@@ -555,6 +638,67 @@ namespace PeterDB {
         if(rbfm.openFile(tableName, fileHandle)) return -1;
         rbfm.insertRecord(fileHandle, attrs, data, rid);
         rbfm.closeFile(fileHandle);
+
+        insertIndexEntries (data, rid, tableName, attrs);
+        return 0;
+    }
+
+    RC RelationManager::deleteIndexEntries (const PeterDB::RID &rid, const std::string &tableName,
+                                            std::vector<PeterDB::Attribute> &attrs) {
+        int tableID;
+        findTableID(tableName, tableID);
+        std::vector<std::tuple<std::string, std::string>> indices;
+        getIndices(tableID, indices);
+        for (auto index: indices) {
+            std::string attributeName = std::get<0>(index);
+            std::string indexFileName = std::get<1>(index);
+
+            void *attributeValue = new char[1000];
+            readAttribute(tableName, rid, attributeName, attributeValue);
+            //TODO: what if the attribute value is NULL ?
+
+            int position;
+            findPositionInRD(attrs, position, attributeName);
+
+            IndexManager &im = IndexManager::instance();
+            IXFileHandle ixFileHandle;
+            im.openFile(indexFileName, ixFileHandle);
+            im.deleteEntry(ixFileHandle, attrs[position], attributeValue, rid);
+            im.closeFile(ixFileHandle);
+
+            free (attributeValue);
+        }
+        return 0;
+    }
+
+    RC RelationManager::insertIndexEntries (const void *data, RID &rid, const std::string &tableName,
+                           std::vector<PeterDB::Attribute> &attrs) {
+
+        int tableID;
+        findTableID(tableName, tableID);
+        std::vector<std::tuple<std::string, std::string>> indices;
+        getIndices(tableID, indices);
+
+        for (auto index: indices) {
+            std::string attributeName = std::get<0>(index);
+            std::string indexFileName = std::get<1>(index);
+
+            int position;
+            findPositionInRD(attrs, position, attributeName);
+
+            char *attributeValue;
+            RecordBasedFileManager::instance().readSingleAttribute((char*)data, attributeValue, position,
+                                                                   attrs[position].type, attrs.size());
+            //TODO: what if the attribute value is NULL ?
+
+            IndexManager &im = IndexManager::instance();
+            IXFileHandle ixFileHandle;
+            im.openFile(indexFileName, ixFileHandle);
+            im.insertEntry(ixFileHandle, attrs[position], attributeValue, rid);
+            im.closeFile(ixFileHandle);
+
+            free(attributeValue);
+        }
         return 0;
     }
 
@@ -577,6 +721,9 @@ namespace PeterDB {
 
         rbfm.openFile(tableName, fileHandle);
         rbfm.deleteRecord(fileHandle, attrs, rid);
+
+        deleteIndexEntries (rid, tableName, attrs);
+
         rbfm.closeFile(fileHandle);
         return 0;
     }
@@ -586,8 +733,8 @@ namespace PeterDB {
 
         std::vector<PeterDB::Attribute > attrs;
         FileHandle fileHandle;
-
         getAttributes(tableName, attrs);
+        updateEntry (rid, data, tableName, attrs);
         rbfm.openFile(tableName, fileHandle);
         rbfm.updateRecord(fileHandle, attrs, data, rid);
         rbfm.closeFile(fileHandle);
@@ -688,32 +835,6 @@ namespace PeterDB {
         return -1;
     }
 
-    RC RelationManager::findTableID (const std::string &tableName, int &id) {
-
-        RM_ScanIterator rmsi;
-        std::string conditionAttribute = "table-name";
-        PeterDB::CompOp compOp = PeterDB::EQ_OP;
-        std::vector<std::string> attributeNames{"table-id"};
-
-        void *value = malloc(tableName.length() + sizeof(int));
-        int tableNameLength = tableName.length();
-        memcpy(value, &tableNameLength, sizeof(int));
-        memcpy((char *) value + sizeof(int), tableName.c_str(), tableName.length());
-
-        scan(tablesFileName, conditionAttribute, compOp, value, attributeNames, rmsi);
-
-        RID tempRID;
-
-        void *outBuffer = malloc(1000);
-        if (rmsi.getNextTuple(tempRID, outBuffer) == RBFM_EOF){
-            return -1;
-        }
-        memcpy(&id, (char *) outBuffer + 1, sizeof(int));
-
-        rmsi.close();
-        return 0;
-    }
-
     template<typename KeyType>
     void bulkLoad(const std::string &tableName, const std::string &attributeName, IXFileHandle ixFileHandle, Attribute attr){
         RM_ScanIterator rmsi;
@@ -780,6 +901,11 @@ namespace PeterDB {
         RecordBasedFileManager::instance().openFile(indicesFileName, indicesFileHandle);
         RecordBasedFileManager::instance().insertRecord(indicesFileHandle, indicesRecordDescriptor,
                                                         indicesBuffer, ixRid);
+//        memset (indicesBuffer, 0, 100);
+//        RecordBasedFileManager::instance().readRecord(indicesFileHandle, indicesRecordDescriptor,
+//                                                      ixRid, indicesBuffer);
+//        printTuple(indicesRecordDescriptor, indicesBuffer, std::cout);
+        std::cout << std::endl;
         RecordBasedFileManager::instance().closeFile(indicesFileHandle);
 
         // check if table is empty
@@ -803,7 +929,109 @@ namespace PeterDB {
     }
 
     RC RelationManager::destroyIndex(const std::string &tableName, const std::string &attributeName){
-        return -1;
+
+        //TODO: check if the index exists
+
+        RM_ScanIterator rmsi;
+        std::string conditionAttribute = "attr-name";
+        PeterDB::CompOp compOp = PeterDB::EQ_OP;
+
+        std::vector<std::string> attributeNames{"index-filename"};
+
+        scan(tablesFileName, conditionAttribute, compOp, &attributeName, attributeNames, rmsi);
+        RID indexRid;
+
+        void *outBuffer = malloc(1000);
+        rmsi.getNextTuple(indexRid, outBuffer);
+
+        int indexFileNameSize = *(int*)outBuffer;
+        std::string indexFileName ((char*)outBuffer + sizeof(indexFileNameSize), indexFileNameSize);
+
+        //delete tuple and file
+        deleteTuple(indicesFileName, indexRid);
+        RecordBasedFileManager::instance().destroyFile(indexFileName);
+
+        rmsi.close();
+        free(outBuffer);
+        return 0;
+    }
+
+    bool isSame (void *OGRecordValue, void *newRecordValue, AttrType type) {
+        int newRecordSize;
+        int OGRecordSize;
+
+        switch (type) {
+            case TypeVarChar: {
+                OGRecordSize = *(int*)OGRecordValue;
+                newRecordSize = *(int*)newRecordValue;
+                std::string OGRecordString((char*)OGRecordValue + sizeof (int), OGRecordSize);
+                std::string newRecordString ((char*)newRecordValue + sizeof (int), newRecordSize);
+                return OGRecordString == newRecordString;
+            }
+            case TypeInt:
+                return *(int*)OGRecordValue == *(int*)newRecordValue;
+
+            case TypeReal:
+                return *(float*)OGRecordValue == *(float*)newRecordValue;
+        }
+    }
+
+    bool changeIndexes(std::tuple<std::string, std::string> &index, const RID &rid,
+                        const std::string &tableName,
+                        const void *data, std::vector<Attribute> &attrs) {
+
+        std::string attributeName = std::get<0>(index);
+        std::string indexFileName = std::get<1>(index);
+
+        RecordBasedFileManager &rbfm = RecordBasedFileManager::instance();
+
+        void *OGRecordValue = malloc(1000);
+        RelationManager::instance().readAttribute(tableName, rid, attributeName, OGRecordValue);
+
+        char *newRecordValue;
+
+        int position;
+        findPositionInRD (attrs, position, attributeName);
+
+        rbfm.readSingleAttribute ((char*)data, newRecordValue,
+                                  position, attrs[position].type, attrs.size());
+
+        if (!isSame(OGRecordValue, newRecordValue, attrs[position].type)) {
+            IndexManager &im = IndexManager::instance();
+            IXFileHandle ixFileHandle;
+            im.openFile(indexFileName, ixFileHandle);
+            im.deleteEntry(ixFileHandle, attrs[position], OGRecordValue, rid);
+            im.insertEntry(ixFileHandle, attrs[position], newRecordValue, rid);
+        }
+    }
+
+    RC RelationManager::updateEntry (const RID &rid, const void *data,
+                    const std::string &tableName, std::vector<Attribute> &attrs) {
+        int tableID;
+        findTableID(tableName, tableID);
+
+        std::vector<std::tuple<std::string, std::string>> indices;
+        //function to get a list of indices with their indexname and its filename
+        //- a function which takes tableID as input
+            // get attributes of index table
+            //- calls scan on IX_Table
+            //- condition attribute is Table ID
+            //- value is ID
+            //- compop is EQ_OP
+            //- attributeNames are get attributes
+            //- getNextTuple until EOF
+            //- for each entry returned, extract the index and index file name
+            //- call read single attribute on both the attributes
+        getIndices (tableID, indices);
+
+        // after getting the indices, extract that attribute in both new and old record -- function
+        for (auto index: indices) {
+            changeIndexes(index, rid, tableName, data, attrs);
+            //compare the two, if they are different, update the index
+            //update: deleteEntry and insertEntry in that index
+            //open the index file and perform the modifications
+        }
+        return 0;
     }
 
     // indexScan returns an iterator to allow the caller to go through qualified entries in index
@@ -816,7 +1044,6 @@ namespace PeterDB {
                                   RM_IndexScanIterator &rm_IndexScanIterator){
         return -1;
     }
-
 
     RM_IndexScanIterator::RM_IndexScanIterator() = default;
 

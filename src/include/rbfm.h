@@ -137,6 +137,8 @@ namespace PeterDB {
         RC readAttribute(FileHandle &fileHandle, const std::vector<Attribute> &recordDescriptor, const RID &rid,
                          const std::string &attributeName, void *data);
 
+        RC readSingleAttribute (char *record, char *&attributeValue, int position, AttrType type, int numFields);
+
         // Scan returns an iterator to allow the caller to go through the results one by one.
         RC scan(FileHandle &fileHandle,
                 const std::vector<Attribute> &recordDescriptor,
