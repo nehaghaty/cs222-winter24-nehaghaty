@@ -81,6 +81,17 @@ namespace PeterDB {
 
         RC destroyIndex(const std::string &tableName, const std::string &attributeName);
 
+        RC updateEntry (const RID &rid, const void *data,
+                                         const std::string &tableName, std::vector<Attribute> &attrs);
+
+        RC deleteIndexEntries (const PeterDB::RID &rid, const std::string &tableName, std::vector<PeterDB::Attribute> &attrs);
+
+        RC insertIndexEntries (const void *data, RID &rid, const std::string &tableName, std::vector<PeterDB::Attribute> &attrs);
+
+        RC findTableID (const std::string &tableName, int &id);
+
+        RC getIndices (const int &tableID, std::vector<std::tuple<std::string, std::string>> &indices);
+
         // indexScan returns an iterator to allow the caller to go through qualified entries in index
         RC indexScan(const std::string &tableName,
                      const std::string &attributeName,
@@ -89,8 +100,6 @@ namespace PeterDB {
                      bool lowKeyInclusive,
                      bool highKeyInclusive,
                      RM_IndexScanIterator &rm_IndexScanIterator);
-
-        RC findTableID(const std::string &tableName, int &id);
 
     protected:
         RelationManager();                                                  // Prevent construction

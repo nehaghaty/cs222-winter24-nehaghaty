@@ -919,7 +919,8 @@ namespace PeterDB {
         return (Bitset.test(7 - (position % CHAR_BIT)));
     }
 
-    RC readSingleAttribute (char *record, char *&attributeValue, int position, AttrType type, int numFields) {
+    RC RecordBasedFileManager::readSingleAttribute (char *record, char *&attributeValue, int position,
+                                                    AttrType type, int numFields) {
         int bitVectorSize = getActualByteForNullsIndicator (numFields);
         if (checkAttributeNull(record, position))
             return -1;
@@ -1230,7 +1231,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
             if (compOp != NO_OP) {
                 char *attributeValue;
                 int numFields = *(int*)(record + sizeof (TombstoneByte));
-                if (readSingleAttribute(record, attributeValue,
+                if (RecordBasedFileManager::instance().readSingleAttribute(record, attributeValue,
                                         attributePositions[conditionAttribute],
                                         compValType,
                                         numFields)) {
