@@ -4,6 +4,7 @@
 #include <cstring>
 #include <sys/stat.h>
 #include <cmath>
+#include <algorithm>
 
 #define CHAR_BIT    8
 
@@ -344,6 +345,7 @@ namespace PeterDB {
             // delete Attributes file
             RecordBasedFileManager::instance().destroyFile(tablesFileName);
             RecordBasedFileManager::instance().destroyFile(attrsFileName);
+            RecordBasedFileManager::instance().destroyFile(indicesFileName);
         }
 
         else{
@@ -506,14 +508,12 @@ namespace PeterDB {
         free(value);
 
         void *outBuffer = malloc(1000);
-        // std::cout<<"getAttr b4 getnexttuple 1"<<std::endl;
         if (rmScanIterator_table.getNextTuple(rid, outBuffer) == RBFM_EOF ) {
             free(outBuffer);
             rmScanIterator_table.close();
             return -1;
         }
         rmScanIterator_table.close();
-        // std::cout<<"getAttr after getnexttuple 1"<<std::endl;
 
         memcpy(&id, (char*)outBuffer + 1, sizeof (int));
 
@@ -524,7 +524,6 @@ namespace PeterDB {
         memcpy(value, &id, sizeof (int));
         scan(attrsFileName, conditionAttribute, compOp, value, attributeNames, rmScanIterator_attribute);
         memset(outBuffer, 0, 1000);
-        // std::cout<<"getAttr b4 getnexttuple 2"<<std::endl;
         while (rmScanIterator_attribute.getNextTuple(rid, outBuffer) != RBFM_EOF) {
             Attribute newAttr;
             int length = *(int*)((char*)outBuffer + 1);
@@ -576,7 +575,7 @@ namespace PeterDB {
     }
 
     void extractIndices (std::vector<std::tuple<std::string, std::string>> &indices, void *outBuffer) {
-        char *dataPointer = (char*)outBuffer;
+        char *dataPointer = (char*)outBuffer + 1;
 
         int sizeIndex = *(int*)dataPointer;
         dataPointer += sizeof (sizeIndex);
@@ -609,7 +608,6 @@ namespace PeterDB {
         PeterDB::addAttribute(recordDescriptor, "index-filename", PeterDB::TypeVarChar, 50);
 
         while (rmsi.getNextTuple(tempRID, outBuffer) != RBFM_EOF) {
-            printTuple(recordDescriptor, outBuffer, std::cout);
             extractIndices (indices, outBuffer);
         }
 
@@ -686,9 +684,11 @@ namespace PeterDB {
             int position;
             findPositionInRD(attrs, position, attributeName);
 
-            char *attributeValue;
-            RecordBasedFileManager::instance().readSingleAttribute((char*)data, attributeValue, position,
-                                                                   attrs[position].type, attrs.size());
+            char *attributeValue = (char*) malloc(1000);
+            RelationManager::instance().readAttribute(tableName, rid, attributeName, attributeValue);
+
+            int test = *(int*)attributeValue;
+
             //TODO: what if the attribute value is NULL ?
 
             IndexManager &im = IndexManager::instance();
@@ -697,7 +697,7 @@ namespace PeterDB {
             im.insertEntry(ixFileHandle, attrs[position], attributeValue, rid);
             im.closeFile(ixFileHandle);
 
-            free(attributeValue);
+            //free(attributeValue);
         }
         return 0;
     }
@@ -720,9 +720,11 @@ namespace PeterDB {
             getAttributes(tableName, attrs);
 
         rbfm.openFile(tableName, fileHandle);
-        rbfm.deleteRecord(fileHandle, attrs, rid);
 
+        //TODO: delete before deleting the record ?
         deleteIndexEntries (rid, tableName, attrs);
+
+        rbfm.deleteRecord(fileHandle, attrs, rid);
 
         rbfm.closeFile(fileHandle);
         return 0;
@@ -848,7 +850,7 @@ namespace PeterDB {
             KeyType attrValue = *(KeyType*)outBuffer;
             combined.push_back(std::make_tuple(attrValue, getNextRid));
         }
-        sort(combined.begin(), combined.end(), IndexManager::instance().compareFunction<KeyType>);
+        sort(combined.begin(), combined.end(), compareFunction<KeyType>);
 
         for(auto entry : combined){
             void* key = static_cast<void*>(&std::get<0>(entry));
@@ -901,11 +903,6 @@ namespace PeterDB {
         RecordBasedFileManager::instance().openFile(indicesFileName, indicesFileHandle);
         RecordBasedFileManager::instance().insertRecord(indicesFileHandle, indicesRecordDescriptor,
                                                         indicesBuffer, ixRid);
-//        memset (indicesBuffer, 0, 100);
-//        RecordBasedFileManager::instance().readRecord(indicesFileHandle, indicesRecordDescriptor,
-//                                                      ixRid, indicesBuffer);
-//        printTuple(indicesRecordDescriptor, indicesBuffer, std::cout);
-        std::cout << std::endl;
         RecordBasedFileManager::instance().closeFile(indicesFileHandle);
 
         // check if table is empty
@@ -938,14 +935,22 @@ namespace PeterDB {
 
         std::vector<std::string> attributeNames{"index-filename"};
 
-        scan(tablesFileName, conditionAttribute, compOp, &attributeName, attributeNames, rmsi);
+        char *value = (char*)malloc (sizeof (int) + attributeName.size());
+        memset(value, 0, sizeof (int) + attributeName.size());
+
+        int attributeNameSize = attributeName.size();
+        memcpy(value, &attributeNameSize, sizeof (int));
+        memcpy(value + sizeof (int), attributeName.c_str(), attributeNameSize);
+
+        scan(indicesFileName, conditionAttribute, compOp, value, attributeNames, rmsi);
         RID indexRid;
 
         void *outBuffer = malloc(1000);
         rmsi.getNextTuple(indexRid, outBuffer);
 
-        int indexFileNameSize = *(int*)outBuffer;
-        std::string indexFileName ((char*)outBuffer + sizeof(indexFileNameSize), indexFileNameSize);
+        char* dataPointer = (char*)outBuffer + sizeof (char);
+        int indexFileNameSize = *(int*)dataPointer;
+        std::string indexFileName ((char*)dataPointer + sizeof(indexFileNameSize), indexFileNameSize);
 
         //delete tuple and file
         deleteTuple(indicesFileName, indexRid);
@@ -993,8 +998,9 @@ namespace PeterDB {
         int position;
         findPositionInRD (attrs, position, attributeName);
 
-        rbfm.readSingleAttribute ((char*)data, newRecordValue,
-                                  position, attrs[position].type, attrs.size());
+        //TODO: readSingleAttribute needs serialized record and not deserialized
+        newRecordValue = (char*) malloc(1000);
+        RelationManager::instance().readAttribute(tableName, rid, attributeName, newRecordValue);
 
         if (!isSame(OGRecordValue, newRecordValue, attrs[position].type)) {
             IndexManager &im = IndexManager::instance();

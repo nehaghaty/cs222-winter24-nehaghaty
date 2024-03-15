@@ -286,7 +286,7 @@ namespace PeterDB {
         for (int i = 0; i < Keys.size(); i++) {
             combined.push_back(std::make_tuple(Keys[i], rids[i]));
         }
-        sort(combined.begin(), combined.end(), IndexManager::instance().compareFunction<KeyType>);
+        sort(combined.begin(), combined.end(), compareFunction<KeyType>);
 
         Keys.clear();
         rids.clear();
@@ -652,7 +652,7 @@ namespace PeterDB {
     void insert(PageNum nodePtr, PageNum &newChildEntry, void *&smallestKey, RID &smallestRid,
                 const void *&key, const RID &rid, IXFileHandle &iXFileHandle,
                 const Attribute &attribute) {
-        int intKey = *(int*) key;
+//        int intKey = *(int*) key;
         // Load desPage of root
         char desPage[PAGE_SIZE];
         char sePage[PAGE_SIZE];
@@ -1448,7 +1448,7 @@ namespace PeterDB {
     }
 
     template<typename KeyType>
-    bool IndexManager::compareFunction(const std::tuple<KeyType, RID> &lhs, const std::tuple<KeyType, RID> &rhs) {
+    bool compareFunction(const std::tuple<KeyType, RID> &lhs, const std::tuple<KeyType, RID> &rhs) {
 
         if (std::get<0>(lhs) != std::get<0>(rhs)) {
             return std::get<0>(lhs) < std::get<0>(rhs);
@@ -1464,7 +1464,7 @@ namespace PeterDB {
     }
 
     template<>
-    bool IndexManager::compareFunction<char*>(const std::tuple<char*, RID> &lhs, const std::tuple<char*, RID> &rhs) {
+    bool compareFunction<char*>(const std::tuple<char*, RID> &lhs, const std::tuple<char*, RID> &rhs) {
 
         char *key1 = std::get<0>(lhs);
         char *key2 = std::get<0>(rhs);
