@@ -126,6 +126,8 @@ namespace PeterDB {
                     memcpy(recordPointer, dataPointer, sizeof(int));
                     // std::cout<<"Record pointer - record "<< recordPointer - record << std::endl;
                     // std::cout<<"insert record float data "<<*(float*)recordPointer<< std::endl;
+                    int test = *(int*) recordPointer;
+
                     recordPointer += sizeof(int);
                     dataPointer += sizeof(int);
                     break;
