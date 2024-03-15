@@ -1,7 +1,66 @@
 #include "src/include/qe.h"
 
 namespace PeterDB {
-    Filter::Filter(Iterator *input, const Condition &condition) {
+
+    void computeParams(const Condition &condition, void* lowKey, void* highKey, bool &highKeyInclusive, bool &lowKeyInclusive){
+        switch(condition.op){
+            case LE_OP:
+                highKeyInclusive = true;
+                highKey = condition.rhsValue.data;
+                lowKey = nullptr;
+                break;
+            case LT_OP:
+                highKeyInclusive = false;
+                highKey = condition.rhsValue.data;
+                lowKey = nullptr;
+                break;
+            case GE_OP:
+                lowKeyInclusive = true;
+                lowKey = condition.rhsValue.data;
+                highKey = nullptr;
+                break;
+            case GT_OP:
+                lowKeyInclusive = false;
+                lowKey = condition.rhsValue.data;
+                highKey = nullptr;
+                break;
+            case EQ_OP:
+                lowKey = condition.rhsValue.data;
+                highKey = condition.rhsValue.data;
+                lowKeyInclusive = true;
+                highKeyInclusive = true;
+                break;
+        }
+    }
+
+    Filter::Filter(Iterator *input, const Condition &condition)
+            : input(input), condition(condition){
+
+        compOp = condition.op;
+        lhsAttr = condition.lhsAttr;
+        rhsValue = condition.rhsValue;
+
+        if (dynamic_cast<TableScan*>(input)) {
+
+            tableScan = dynamic_cast<TableScan*>(input);
+            tableName = tableScan->getTableName();
+            std::vector<std::string> attrNames;
+            tableScan->getAttributesVanilla(attrNames);
+
+            tableScan->setIterator(compOp, lhsAttr, rhsValue.data, attrNames);
+
+        }
+        else{
+
+            indexScan = dynamic_cast<IndexScan*>(input);
+
+            void *lowKey, *highKey;
+            bool lowKeyInclusive, highKeyInclusive;
+
+            computeParams(condition, lowKey, highKey, lowKeyInclusive, highKeyInclusive);
+            indexScan->setIterator(lowKey, highKey, lowKeyInclusive, highKeyInclusive);
+
+        }
     }
 
     Filter::~Filter() {
@@ -9,11 +68,30 @@ namespace PeterDB {
     }
 
     RC Filter::getNextTuple(void *data) {
-        return -1;
+        if (dynamic_cast<TableScan*>(input)) {
+            tableScan->getNextTuple(data);
+        }
+        else if(dynamic_cast<IndexScan*>(input)) {
+            indexScan->getNextTuple(data);
+        }
+        else{
+            return -1;
+        }
+        return 0;
     }
 
     RC Filter::getAttributes(std::vector<Attribute> &attrs) const {
-        return -1;
+        attrs.clear();
+        if (dynamic_cast<TableScan*>(input)) {
+            tableScan->getAttributes(attrs);
+        }
+        else if(dynamic_cast<IndexScan*>(input)) {
+            indexScan->getAttributes(attrs);
+        }
+        else{
+            return -1;
+        }
+        return 0;
     }
 
     Project::Project(Iterator *input, const std::vector<std::string> &attrNames) {

@@ -1048,7 +1048,23 @@ namespace PeterDB {
                                   bool lowKeyInclusive,
                                   bool highKeyInclusive,
                                   RM_IndexScanIterator &rm_IndexScanIterator){
-        return -1;
+
+        std::string ixFilename = tableName+"_"+attrsFileName;
+        IXFileHandle ixFileHandle;
+        IndexManager::instance().openFile(ixFilename, ixFileHandle);
+        std::vector<Attribute> attributes;
+        getAttributes(tableName,attributes);
+        Attribute attribute;
+        for(const auto& attr:attributes){
+            if(attr.name == attributeName){
+                attribute = attr;
+                break;
+            }
+        }
+
+        IndexManager::instance().scan(ixFileHandle, attribute,lowKey, highKey,lowKeyInclusive,highKeyInclusive,
+                                      rm_IndexScanIterator.IX_Scan_Iterator);
+        return 0;
     }
 
     RM_IndexScanIterator::RM_IndexScanIterator() = default;
