@@ -103,10 +103,6 @@ namespace PeterDB {
             return 0;
         };
 
-        std::string getTableName(){
-            return tableName;
-        };
-
         ~TableScan() override {
             iter.close();
         };
@@ -178,6 +174,8 @@ namespace PeterDB {
         TableScan *tableScan;
         IndexScan *indexScan;
         std::string tableName;
+        int attrPosition;
+        std::vector <Attribute> classAttrs;
         // Filter operator
     public:
         Filter(Iterator *input,               // Iterator of input R

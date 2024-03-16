@@ -1,4 +1,5 @@
 #include "src/include/qe.h"
+#include <sstream>
 
 namespace PeterDB {
 
@@ -33,63 +34,134 @@ namespace PeterDB {
         }
     }
 
+    std::vector<std::string> splitString(const std::string &str, char delimiter) {
+        std::vector<std::string> result;
+        std::istringstream iss(str);
+        std::string token;
+
+        while (std::getline(iss, token, delimiter)) {
+            result.push_back(token);
+        }
+
+        return result;
+    }
+
+    int findAttributePosition(std::vector<Attribute>& attrs, std::string& lhsAttr){
+        int position =0;
+        for(const auto& attr:attrs){
+            if(attr.name == lhsAttr){
+                return position;
+            }
+            position++;
+        }
+        return position;
+    }
+
+    static int getActualByteForNullsIndicator(unsigned fieldCount) {
+
+        return ceil((double) fieldCount / CHAR_BIT);
+    }
+
     Filter::Filter(Iterator *input, const Condition &condition)
             : input(input), condition(condition){
 
         compOp = condition.op;
-        lhsAttr = condition.lhsAttr;
+        std::vector<std::string> splitStrings = splitString(condition.lhsAttr, '.');
+        tableName = splitStrings[0];
+        lhsAttr = splitStrings[1];
+        RelationManager::instance().getAttributes(tableName, classAttrs);
+        attrPosition = findAttributePosition(classAttrs, lhsAttr);
         rhsValue = condition.rhsValue;
 
-        if (dynamic_cast<TableScan*>(input)) {
-
-            tableScan = dynamic_cast<TableScan*>(input);
-            tableName = tableScan->getTableName();
-            std::vector<std::string> attrNames;
-            tableScan->getAttributesVanilla(attrNames);
-
-            tableScan->setIterator(compOp, lhsAttr, rhsValue.data, attrNames);
-
-        }
-        else{
-
-            indexScan = dynamic_cast<IndexScan*>(input);
-
-            void *lowKey, *highKey;
-            bool lowKeyInclusive, highKeyInclusive;
-
-            computeParams(condition, lowKey, highKey, lowKeyInclusive, highKeyInclusive);
-            indexScan->setIterator(lowKey, highKey, lowKeyInclusive, highKeyInclusive);
-
-        }
     }
 
     Filter::~Filter() {
 
     }
 
+    RC readDeserializedAttrValue (char *inBuffer, int position, std::vector<Attribute> attrs, void *&attrValue) {
+        int bitVectorSize = getActualByteForNullsIndicator (attrs.size());
+        std::vector<bool> isNull;
+        char *bitVectorPointer = inBuffer;
+        AttrType  attrType = attrs[position].type;
+
+        for (int i = 0; i < bitVectorSize; i++) {
+            for (int bit = CHAR_BIT - 1; bit >= 0; --bit) {
+                isNull.push_back((((char*)bitVectorPointer)[i] & (1 << bit)) != 0);
+            }
+        }
+
+        if(isNull[position])
+            return -1;
+
+        char *recordOffset = inBuffer;
+        recordOffset+= bitVectorSize;
+        for(int i=0;i<position;i++) {
+            switch (attrs[i].type) {
+                case TypeInt:
+                    if (!isNull[i])
+                        recordOffset += sizeof(int);
+                    break;
+                case TypeReal:
+                    if (!isNull[i])
+                        recordOffset += sizeof(float);
+                    break;
+                case TypeVarChar:
+                    if (!isNull[i]) {
+                        int strLen = *(int *) (recordOffset);
+                        recordOffset += sizeof(int) + strLen;
+                    }
+                    break;
+            }
+        }
+
+        switch(attrType){
+            case TypeInt:
+                attrValue = malloc(sizeof (int));
+                memcpy(attrValue, recordOffset, sizeof(int));
+                break;
+            case TypeReal:
+                attrValue = malloc(sizeof (float));
+                memcpy(attrValue, recordOffset, sizeof(float));
+                break;
+            case TypeVarChar:
+                int strLen = *(int*)(recordOffset);
+                attrValue = malloc(sizeof (int)+strLen);
+                memcpy(attrValue, recordOffset, sizeof(int)+strLen);
+                break;
+        }
+
+
+
+        return 0;
+    }
+
     RC Filter::getNextTuple(void *data) {
-        if (dynamic_cast<TableScan*>(input)) {
-            tableScan->getNextTuple(data);
-        }
-        else if(dynamic_cast<IndexScan*>(input)) {
-            indexScan->getNextTuple(data);
-        }
-        else{
+
+        if(attrPosition == -1  || attrPosition >= classAttrs.size()){
+            std::cout<<"Attribute not found in table"<<std::endl;
             return -1;
         }
-        return 0;
+
+        void *attrValue = nullptr;
+
+        while (input->getNextTuple(data) != QE_EOF) {
+            readDeserializedAttrValue((char*)data, attrPosition, classAttrs, attrValue);
+            if(RecordBasedFileManager::instance().compareAttributes(attrValue, rhsValue.data, compOp, rhsValue.type)==0){
+                return 0;
+            }
+
+        }
+        return -1;
     }
 
     RC Filter::getAttributes(std::vector<Attribute> &attrs) const {
         attrs.clear();
-        if (dynamic_cast<TableScan*>(input)) {
-            tableScan->getAttributes(attrs);
-        }
-        else if(dynamic_cast<IndexScan*>(input)) {
-            indexScan->getAttributes(attrs);
-        }
-        else{
-            return -1;
+        attrs = this->classAttrs;
+
+        // For attribute in std::vector<Attribute>, name it as rel.attr
+        for (Attribute &attr : attrs) {
+            attr.name = tableName + "." + attr.name;
         }
         return 0;
     }
@@ -111,7 +183,8 @@ namespace PeterDB {
     }
 
     BNLJoin::BNLJoin(Iterator *leftIn, TableScan *rightIn, const Condition &condition, const unsigned int numPages) {
-
+        // table scan on left table for num
+        // store in unordered map of size
     }
 
     BNLJoin::~BNLJoin() {
