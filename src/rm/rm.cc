@@ -687,14 +687,12 @@ namespace PeterDB {
             char *attributeValue = (char*) malloc(1000);
             RelationManager::instance().readAttribute(tableName, rid, attributeName, attributeValue);
 
-            int test = *(int*)attributeValue;
-
             //TODO: what if the attribute value is NULL ?
 
             IndexManager &im = IndexManager::instance();
             IXFileHandle ixFileHandle;
             im.openFile(indexFileName, ixFileHandle);
-            im.insertEntry(ixFileHandle, attrs[position], attributeValue, rid);
+            im.insertEntry(ixFileHandle, attrs[position], attributeValue + 1, rid);
             im.closeFile(ixFileHandle);
 
             //free(attributeValue);
@@ -1076,7 +1074,7 @@ namespace PeterDB {
     }
 
     RC RM_IndexScanIterator::close(){
-        return -1;
+        return 0;
     }
 
 } // namespace PeterDB
