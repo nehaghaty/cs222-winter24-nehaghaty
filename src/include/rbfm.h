@@ -150,6 +150,9 @@ namespace PeterDB {
 
         RC compareAttributes (void *attribute, void *value, CompOp compOp, AttrType type);
 
+        void processSelectedAttributes(const std::vector<std::string>&attributeNames, std::unordered_map<std::string, int> &attributePositions,
+                                       char *&result, std::vector<bool> isNull);
+
 
     protected:
         RecordBasedFileManager();                                                   // Prevent construction

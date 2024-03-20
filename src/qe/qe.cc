@@ -19,38 +19,9 @@ namespace PeterDB {
         return result;
     }
 
-    int findAttributePosition(std::vector<Attribute>& attrs, const std::string& lhsAttr){
-        int position =0;
-        for(const auto& attr:attrs){
-            if(attr.name == lhsAttr){
-                return position;
-            }
-            position++;
-        }
-        return position;
-    }
-
     static int getActualByteForNullsIndicator(unsigned fieldCount) {
 
         return ceil((double) fieldCount / CHAR_BIT);
-    }
-
-    Filter::Filter(Iterator *input, const Condition &condition)
-            : input(input), condition(condition){
-
-        compOp = condition.op;
-//        std::vector<std::string> splitStrings = splitString(condition.lhsAttr, '.');
-//        tableName = splitStrings[0];
-//        lhsAttr = splitStrings[1];
-//        RelationManager::instance().getAttributes(tableName, classAttrs);
-        input->getAttributes(classAttrs);
-        attrPosition = findAttributePosition(classAttrs, condition.lhsAttr);
-        rhsValue = condition.rhsValue;
-
-    }
-
-    Filter::~Filter() {
-
     }
 
     RC readDeserializedAttrValue (char *inBuffer, int position, std::vector<Attribute> attrs, void *&attrValue) {
@@ -108,6 +79,111 @@ namespace PeterDB {
         return 0;
     }
 
+    RC projectSelectedAttrs(char *record,
+                            const std::vector<Attribute>&recordDescriptor,
+                            const std::vector<std::string>&attributeNames,
+                            void *&data,
+                            std::unordered_map<std::string, int> &attributePositions,
+                            std::vector<std::string> projectedPureAttrs,
+                            std::unordered_set<int> positionsRequired) {
+
+        char *bitVectorPointer = record;
+        int fieldCount = recordDescriptor.size();
+        int originalBitVectorSize = ceil((double) fieldCount / CHAR_BIT);
+        int newBitVectorSize = ceil((double) attributeNames.size() / CHAR_BIT);
+        std::vector<bool> isNull;
+
+        for (int i = 0; i < originalBitVectorSize; i++) {
+            for (int bit = CHAR_BIT - 1; bit >= 0; --bit) {
+                isNull.push_back((((char*)bitVectorPointer)[i] & (1 << bit)) != 0);
+            }
+        }
+        int total_size = newBitVectorSize;
+
+        for (auto attribute: projectedPureAttrs) {
+            int position = attributePositions[attribute];
+
+            total_size += recordDescriptor[position].length;
+            if (recordDescriptor[position].type == TypeVarChar)
+                total_size += sizeof (int);
+        }
+
+        char* deserializedRecord = (char*)malloc(total_size);
+        char *deSerRecordPointer = deserializedRecord;
+        memset(deserializedRecord, 0, total_size);
+
+        char *bitvector;
+        RecordBasedFileManager::instance().
+                processSelectedAttributes (attributeNames, attributePositions, bitvector, isNull);
+
+        memcpy(deSerRecordPointer, bitvector, newBitVectorSize);
+        free(bitvector);
+
+        deSerRecordPointer += newBitVectorSize;
+
+        //TODO: allocate only as much is required
+        for (int i = 0; i < projectedPureAttrs.size(); i ++) {
+            int position = attributePositions[projectedPureAttrs[i]];
+
+            if (isNull[position]) {
+                continue;
+            }
+
+            void *inBuffer = nullptr;
+            readDeserializedAttrValue (record, position, recordDescriptor, inBuffer);
+            char *attributeValue = (char*)inBuffer;
+
+            if (recordDescriptor[position].type == TypeVarChar) {
+                total_size -= recordDescriptor[position].length;
+                int length_of_string = *(int*)attributeValue;
+                memcpy(deSerRecordPointer, &length_of_string, sizeof (int));
+                deSerRecordPointer += sizeof (length_of_string);
+
+                total_size += length_of_string;
+                memcpy(deSerRecordPointer, attributeValue + sizeof (int), length_of_string);
+                deSerRecordPointer += length_of_string;
+            }
+            else {
+//                    copy real/int to project
+                memcpy(deSerRecordPointer, attributeValue, sizeof (int));
+                deSerRecordPointer += sizeof (int);
+            }
+        }
+        memcpy(data, deserializedRecord , total_size);
+
+        free(deserializedRecord);
+        return 0;
+    }
+
+    int findAttributePosition(std::vector<Attribute>& attrs, const std::string& lhsAttr){
+        int position =0;
+        for(const auto& attr:attrs){
+            if(attr.name == lhsAttr){
+                return position;
+            }
+            position++;
+        }
+        return position;
+    }
+
+    Filter::Filter(Iterator *input, const Condition &condition)
+            : input(input), condition(condition){
+
+        compOp = condition.op;
+//        std::vector<std::string> splitStrings = splitString(condition.lhsAttr, '.');
+//        tableName = splitStrings[0];
+//        lhsAttr = splitStrings[1];
+//        RelationManager::instance().getAttributes(tableName, classAttrs);
+        input->getAttributes(classAttrs);
+        attrPosition = findAttributePosition(classAttrs, condition.lhsAttr);
+        rhsValue = condition.rhsValue;
+
+    }
+
+    Filter::~Filter() {
+
+    }
+
     RC Filter::getNextTuple(void *data) {
 
         if(attrPosition == -1  || attrPosition >= classAttrs.size()){
@@ -133,8 +209,23 @@ namespace PeterDB {
         return 0;
     }
 
-    Project::Project(Iterator *input, const std::vector<std::string> &attrNames) {
+    Project::Project(Iterator *input, const std::vector<std::string> &attrNames)
+            : input(input), projectedAttrs(attrNames) {
+        //TODO: Order of attributes ?
 
+        tableName = splitString(attrNames[0], '.')[0];
+        RelationManager::instance().getAttributes(tableName, actualAttributes);
+
+        for (int i = 0; i < actualAttributes.size(); i++) {
+            actualAttributePositions[actualAttributes[i].name] = i;
+            actualAttrNames.push_back(actualAttributes[i].name);
+        }
+
+        for (std::string i: attrNames) {
+            std::string attributeName = splitString(i, '.')[1];
+            positionsRequired.insert(actualAttributePositions[attributeName]);
+            projectedPureAttrs.push_back(attributeName);
+        }
     }
 
     Project::~Project() {
@@ -142,11 +233,43 @@ namespace PeterDB {
     }
 
     RC Project::getNextTuple(void *data) {
-        return -1;
+
+        void *outBuffer = malloc(PAGE_SIZE);
+        memset(outBuffer, 0, PAGE_SIZE);
+        if (input->getNextTuple(outBuffer) == IX_EOF)
+            return IX_EOF;
+
+        projectSelectedAttrs((char *) outBuffer,
+                             actualAttributes,
+                             actualAttrNames,
+                             data,
+                             actualAttributePositions,
+                             projectedPureAttrs,
+                             positionsRequired);
+
+        char *out = (char*)data + 1;
+        int c = *(float*)(out);
+        int d = *(int*)(out + sizeof (int));
+
+        return 0;
     }
 
-    RC Project::getAttributes(std::vector<Attribute> &attrs) const {
-        return -1;
+    RC Project::getAttributes(std::vector<Attribute> &attributes) const {
+
+        attributes.clear();
+        // For attribute in std::vector<Attribute>, name it as rel.attr
+
+        //TODO: Order of attributes ?
+        for (std::string attr: projectedAttrs) {
+            Attribute attribute;
+            attribute.name = splitString(attr, '.')[1];
+            if (actualAttributePositions.find(attribute.name) != actualAttributePositions.end()) {
+                attribute = actualAttributes[actualAttributePositions.at(attribute.name)];
+                attribute.name = tableName + "." + attribute.name;
+                attributes.push_back(attribute);
+            }
+        }
+        return 0;
     }
 
     int calculateTupleSize(void *inBuffer, std::vector<Attribute> attrs){
@@ -420,8 +543,13 @@ namespace PeterDB {
         return -1;
     }
 
-    Aggregate::Aggregate(Iterator *input, const Attribute &aggAttr, AggregateOp op) {
-
+    Aggregate::Aggregate(Iterator *input, const Attribute &aggAttr, AggregateOp op):
+            aggregateAttribute(aggAttr), op(op), input(input){
+        minValue = 0;
+        maxValue = 0;
+        valueSum = 0;
+        valueCount = 0;
+        returned = false;
     }
 
     Aggregate::Aggregate(Iterator *input, const Attribute &aggAttr, const Attribute &groupAttr, AggregateOp op) {
@@ -433,10 +561,74 @@ namespace PeterDB {
     }
 
     RC Aggregate::getNextTuple(void *data) {
-        return -1;
+        void *attrValue = nullptr;
+        std::vector<std::string> splitStrings = splitString(aggregateAttribute.name, '.');
+        tableName = splitStrings[0];
+        lhsAttr = splitStrings[1];
+
+        RelationManager::instance().getAttributes(tableName, classAttrs);
+        attrPosition = findAttributePosition(classAttrs, lhsAttr);
+
+        while (input->getNextTuple(data) != QE_EOF) {
+            readDeserializedAttrValue((char*)data, attrPosition, classAttrs, attrValue);
+            float retrievedAttribute = *(int*)((char*)attrValue);
+            maxValue = std::max(maxValue, retrievedAttribute);
+            valueSum += retrievedAttribute;
+            valueCount += 1;
+        }
+        if (returned)
+            return QE_EOF;
+
+        returned = true;
+        memset(data, 0, 1);
+        float toBeCopied = 0;
+        switch (op) {
+            case MAX:
+                toBeCopied = maxValue;
+                break;
+            case MIN:
+                toBeCopied = minValue;
+                break;
+            case AVG:
+                toBeCopied = (valueSum / valueCount);
+                break;
+            case SUM:
+                toBeCopied = valueSum;
+                break;
+            case COUNT:
+                toBeCopied = valueCount;
+        }
+        memcpy((char*)data + 1, &toBeCopied, sizeof (maxValue));
+        return 0;
     }
 
     RC Aggregate::getAttributes(std::vector<Attribute> &attrs) const {
-        return -1;
+        std::string opName;
+        switch (op) {
+            case MIN:
+                opName = "MIN";
+                break;
+            case MAX:
+                opName = "MAX";
+                break;
+            case COUNT:
+                opName = "COUNT";
+                break;
+            case SUM:
+                opName = "SUM";
+                break;
+            case AVG:
+                opName = "AVG";
+                break;
+        }
+
+        Attribute attr;
+        attr.name = opName + "(" + aggregateAttribute.name + ")";
+        attr.type = TypeReal;
+        attr.length = sizeof(float);
+
+        attrs.clear();
+        attrs.push_back(attr);
+        return 0;
     }
 } // namespace PeterDB
