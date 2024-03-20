@@ -848,7 +848,6 @@ namespace PeterDB {
                     delete[] tombStone;
 
                 }
-
             }
         }
 
@@ -1003,10 +1002,12 @@ namespace PeterDB {
             float valReal = *(float*)value;
             return (false == compareRealAttributes(attrReal, valReal, compOp));
         }
-        return 0;
     }
-    void processSelectedAttributes(const std::vector<std::string>&attributeNames, std::unordered_map<std::string, int> &attributePositions,
-                                   char *&result, std::vector<bool> isNull){
+    void RecordBasedFileManager::
+    processSelectedAttributes(const std::vector<std::string>&attributeNames,
+                              std::unordered_map<std::string, int> &attributePositions,
+                              char *&result, std::vector<bool> isNull){
+
         size_t selectedFieldSize = attributeNames.size();
         result = (char*) malloc((selectedFieldSize+7) / 8);
         memset(result, 0, (selectedFieldSize + 7) / 8);
@@ -1059,6 +1060,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
         memset(deserializedRecord, 0, total_size);
 
         char *bitvector;
+        RecordBasedFileManager::instance().
         processSelectedAttributes (attributeNames, attributePositions, bitvector, isNull);
         memcpy(deSerRecordPointer, bitvector, newBitVectorSize);
         free(bitvector);

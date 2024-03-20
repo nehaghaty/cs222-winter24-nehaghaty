@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <limits>
+#include <unordered_set>
 
 #include "rm.h"
 #include "ix.h"
@@ -142,9 +143,13 @@ namespace PeterDB {
         };
 
         RC getNextTuple(void *data) override {
+            std::cout << __LINE__ << std::endl;
             RC rc = iter.getNextEntry(rid, key);
             if (rc == 0) {
                 rc = rm.readTuple(tableName, rid, data);
+                std::vector<Attribute> attrs;
+                rm.getAttributes(tableName, attrs);
+//                rm.printTuple(attrs, data, std::cout);
             }
             return rc;
         };
@@ -153,11 +158,11 @@ namespace PeterDB {
             attributes.clear();
             attributes = this->attrs;
 
-
             // For attribute in std::vector<Attribute>, name it as rel.attr
             for (Attribute &attribute : attributes) {
                 attribute.name = tableName + "." + attribute.name;
             }
+            return  0;
         };
 
         ~IndexScan() override {
@@ -189,7 +194,18 @@ namespace PeterDB {
     };
 
     class Project : public Iterator {
-        // Projection operator
+        std::string lhsAttr;
+        Iterator *input;
+        TableScan *tableScan;
+        IndexScan *indexScan;
+        std::string tableName;
+        std::vector<std::string> projectedAttrs;
+        std::vector<std::string> projectedPureAttrs;
+        std::vector<Attribute> actualAttributes;
+        std::vector<std::string> actualAttrNames;
+        std::unordered_map<std::string, int> actualAttributePositions;
+        std::unordered_set<int> positionsRequired;
+
     public:
         Project(Iterator *input,                                // Iterator of input R
                 const std::vector<std::string> &attrNames);     // std::vector containing attribute names
@@ -280,6 +296,21 @@ namespace PeterDB {
     public:
         // Mandatory
         // Basic aggregation
+        float minValue;
+        float maxValue;
+        float valueSum;
+        float valueCount;
+        bool returned;
+
+        std::string lhsAttr;
+        Value rhsValue;
+        Iterator *input;
+        std::string tableName;
+        int attrPosition;
+        std::vector <Attribute> classAttrs;
+        Attribute aggregateAttribute;
+        AggregateOp op;
+
         Aggregate(Iterator *input,          // Iterator of input R
                   const Attribute &aggAttr,        // The attribute over which we are computing an aggregate
                   AggregateOp op            // Aggregate operation

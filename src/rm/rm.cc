@@ -637,7 +637,7 @@ namespace PeterDB {
         rbfm.insertRecord(fileHandle, attrs, data, rid);
         rbfm.closeFile(fileHandle);
 
-//        insertIndexEntries (data, rid, tableName, attrs);
+        insertIndexEntries (data, rid, tableName, attrs);
         return 0;
     }
 
@@ -845,7 +845,7 @@ namespace PeterDB {
 
         std::vector<std::tuple<KeyType, PeterDB::RID>> combined;
         while (rmsi.getNextTuple(getNextRid, outBuffer) != RBFM_EOF){
-            KeyType attrValue = *(KeyType*)outBuffer;
+            KeyType attrValue = *(KeyType*)(outBuffer + 1);
             combined.push_back(std::make_tuple(attrValue, getNextRid));
         }
         sort(combined.begin(), combined.end(), compareFunction<KeyType>);
@@ -1047,7 +1047,7 @@ namespace PeterDB {
                                   bool highKeyInclusive,
                                   RM_IndexScanIterator &rm_IndexScanIterator){
 
-        std::string ixFilename = tableName+"_"+attrsFileName;
+        std::string ixFilename = tableName+"_"+attributeName + ".idx";
         IXFileHandle ixFileHandle;
         IndexManager::instance().openFile(ixFilename, ixFileHandle);
         std::vector<Attribute> attributes;
@@ -1070,7 +1070,11 @@ namespace PeterDB {
     RM_IndexScanIterator::~RM_IndexScanIterator() = default;
 
     RC RM_IndexScanIterator::getNextEntry(RID &rid, void *key){
-        return -1;
+        int retVal = IX_Scan_Iterator.getNextEntry(rid, key);
+        if(retVal){
+            return RM_EOF;
+        }
+        return 0;
     }
 
     RC RM_IndexScanIterator::close(){
