@@ -427,7 +427,6 @@ namespace PeterDB {
 
         // delete file
         // delete record
-
         //get the id of the table name from Tables
         std::string conditionAttribute = "table-name";
         PeterDB::CompOp compOp = PeterDB::EQ_OP;
@@ -485,13 +484,14 @@ namespace PeterDB {
         for (auto index: indices) {
             destroyIndex(tableName, std::get<0>(index));
         }
+
         rmScanIterator2.close();
         free(outBuffer);
         return 0;
     }
 
     RC RelationManager::getAttributes(const std::string &tableName, std::vector<Attribute> &attrs) {
-
+        attrs.clear();
         std::string conditionAttribute = "table-name";
         PeterDB::CompOp compOp = PeterDB::EQ_OP;
         std::vector<std::string> attributeNames {"table-id"};
@@ -637,7 +637,7 @@ namespace PeterDB {
         rbfm.insertRecord(fileHandle, attrs, data, rid);
         rbfm.closeFile(fileHandle);
 
-        insertIndexEntries (data, rid, tableName, attrs);
+//        insertIndexEntries (data, rid, tableName, attrs);
         return 0;
     }
 
@@ -687,14 +687,12 @@ namespace PeterDB {
             char *attributeValue = (char*) malloc(1000);
             RelationManager::instance().readAttribute(tableName, rid, attributeName, attributeValue);
 
-            int test = *(int*)attributeValue;
-
             //TODO: what if the attribute value is NULL ?
 
             IndexManager &im = IndexManager::instance();
             IXFileHandle ixFileHandle;
             im.openFile(indexFileName, ixFileHandle);
-            im.insertEntry(ixFileHandle, attrs[position], attributeValue, rid);
+            im.insertEntry(ixFileHandle, attrs[position], attributeValue + 1, rid);
             im.closeFile(ixFileHandle);
 
             //free(attributeValue);
@@ -800,6 +798,10 @@ namespace PeterDB {
         else if (tableName == attrsFileName) {
             createAttrRecordDescriptor(recordDescriptor);
             rbfm.openFile(attrsFileName, fileHandle);
+        }
+        else if (tableName == indicesFileName) {
+            createIndicesRecordDescriptor(recordDescriptor);
+            rbfm.openFile(indicesFileName, fileHandle);
         }
         else {
             if (getAttributes(tableName, recordDescriptor))
@@ -1048,7 +1050,23 @@ namespace PeterDB {
                                   bool lowKeyInclusive,
                                   bool highKeyInclusive,
                                   RM_IndexScanIterator &rm_IndexScanIterator){
-        return -1;
+
+        std::string ixFilename = tableName+"_"+attrsFileName;
+        IXFileHandle ixFileHandle;
+        IndexManager::instance().openFile(ixFilename, ixFileHandle);
+        std::vector<Attribute> attributes;
+        getAttributes(tableName,attributes);
+        Attribute attribute;
+        for(const auto& attr:attributes){
+            if(attr.name == attributeName){
+                attribute = attr;
+                break;
+            }
+        }
+
+        IndexManager::instance().scan(ixFileHandle, attribute,lowKey, highKey,lowKeyInclusive,highKeyInclusive,
+                                      rm_IndexScanIterator.IX_Scan_Iterator);
+        return 0;
     }
 
     RM_IndexScanIterator::RM_IndexScanIterator() = default;
@@ -1060,7 +1078,7 @@ namespace PeterDB {
     }
 
     RC RM_IndexScanIterator::close(){
-        return -1;
+        return 0;
     }
 
 } // namespace PeterDB

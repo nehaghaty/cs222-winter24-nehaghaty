@@ -74,9 +74,9 @@ namespace PeterDB {
         };
 
         // Start a new iterator given the new compOp and value
-        void setIterator() {
+        void setIterator(CompOp compOp, const std::string &conditionAttribute, const void *value, std::vector<std::string> attrNames) {
             iter.close();
-            rm.scan(tableName, "", NO_OP, NULL, attrNames, iter);
+            rm.scan(tableName, conditionAttribute, compOp, value, attrNames, iter);
         };
 
         RC getNextTuple(void *data) override {
@@ -90,6 +90,15 @@ namespace PeterDB {
             // For attribute in std::vector<Attribute>, name it as rel.attr
             for (Attribute &attribute : attributes) {
                 attribute.name = tableName + "." + attribute.name;
+            }
+            return 0;
+        };
+
+        RC getAttributesVanilla(std::vector<std::string> &attrNames) {
+            attrNames.clear();
+
+            for (Attribute &attribute : this->attrs) {
+                attrNames.push_back(attribute.name);
             }
             return 0;
         };
@@ -157,6 +166,14 @@ namespace PeterDB {
     };
 
     class Filter : public Iterator {
+        CompOp compOp;
+        std::string lhsAttr;
+        Value rhsValue;
+        Iterator *input;
+        Condition condition;
+        std::string tableName;
+        int attrPosition;
+        std::vector <Attribute> classAttrs;
         // Filter operator
     public:
         Filter(Iterator *input,               // Iterator of input R
@@ -184,8 +201,25 @@ namespace PeterDB {
         RC getAttributes(std::vector<Attribute> &attrs) const override;
     };
 
+    typedef std::vector<void*> RecordList;
+
     class BNLJoin : public Iterator {
         // Block nested-loop join operator
+        Iterator *leftIn;
+        TableScan *rightIn;
+        Condition condition;
+        unsigned int numPages;
+        Attribute leftInAttr;
+        Attribute rightInAttr;
+        int leftAttrPos;
+        int rightAttrPos;
+        std::vector<Attribute> leftInAttrs;
+        std::vector<Attribute> rightInAttrs;
+        std::vector<Attribute> joinAttrs;
+        std::unordered_map<int, std::vector<void*>> intMap;
+        std::unordered_map<float, std::vector<void*>> floatMap;
+        std::unordered_map<std::string, std::vector<void*>> varcharMap;
+
     public:
         BNLJoin(Iterator *leftIn,            // Iterator of input R
                 TableScan *rightIn,           // TableScan Iterator of input S
@@ -200,10 +234,14 @@ namespace PeterDB {
 
         // For attribute in std::vector<Attribute>, name it as rel.attr
         RC getAttributes(std::vector<Attribute> &attrs) const override;
+
+        RC insertIntoMap(void *tupleData, std::vector<Attribute> &leftAttrs, Attribute &condAttr, int leftAttrPos);
+
+        RC joinTables(void* data, char rightTuple[PAGE_SIZE], void* rightAttrVal);
     };
 
     class INLJoin : public Iterator {
-        // Index nested-loop join operator
+
     public:
         INLJoin(Iterator *leftIn,           // Iterator of input R
                 IndexScan *rightIn,          // IndexScan Iterator of input S
@@ -221,6 +259,7 @@ namespace PeterDB {
     // 10 extra-credit points
     class GHJoin : public Iterator {
         // Grace hash join operator
+
     public:
         GHJoin(Iterator *leftIn,               // Iterator of input R
                Iterator *rightIn,               // Iterator of input S

@@ -155,7 +155,7 @@ namespace PeterDB {
     RC RBFM_ScanIterator::close(){
         PeterDB::RecordBasedFileManager::instance().closeFile(fileHandle);
         if(value){
-            free(value);
+//            free(value);
             value = nullptr;
         }
         // free(value);
@@ -986,7 +986,7 @@ namespace PeterDB {
         }
     }
 
-    RC compareAttributes (void *attribute, void *value, CompOp compOp, AttrType type) {
+    RC RecordBasedFileManager::compareAttributes (void *attribute, void *value, CompOp compOp, AttrType type) {
         if (type == TypeVarChar){
             std::string attrString((char*)((char*)attribute + sizeof (int)), *(int*)attribute);
             std::string valString((char*)value + sizeof (int), *(int*)value);
@@ -1008,7 +1008,7 @@ namespace PeterDB {
     void processSelectedAttributes(const std::vector<std::string>&attributeNames, std::unordered_map<std::string, int> &attributePositions,
                                    char *&result, std::vector<bool> isNull){
         size_t selectedFieldSize = attributeNames.size();
-        result = (char*) malloc((selectedFieldSize+7) /8);
+        result = (char*) malloc((selectedFieldSize+7) / 8);
         memset(result, 0, (selectedFieldSize + 7) / 8);
         std::vector<int> positions (selectedFieldSize);
         for(int i=0; i < selectedFieldSize; i++){
@@ -1024,10 +1024,6 @@ namespace PeterDB {
                 result[destByteIndex] |= (1 << (7 - destBitIndex));
             }
         }
-        // std::bitset<8> Bitset;
-        // memcpy(&Bitset, result, 1);
-        // free(result);
-        //std::cout << isNull[1] << " "<<Bitset << std::endl;
     }
 
 RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&recordDescriptor,
@@ -1150,11 +1146,6 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
         char *record = nullptr;
         readStoredRecord (rid, record, page);
         int numFields = *(int*)(record + sizeof (TombstoneByte));
-        // std::cout << "First field " << *(int*) (record + sizeof (TombstoneByte) + sizeof (int) + 1);
-        // std::bitset<8> testing;
-        // memcpy(&testing, (char*)record + sizeof (TombstoneByte) + sizeof (int), 1);
-        // std::cout << "Num Fields " << numFields << std::endl;
-        // std::cout << testing << std::endl;
         int position = 0;
         int i;
         for (i = 0; i < recordDescriptor.size(); i++) {
@@ -1243,7 +1234,7 @@ RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&rec
                     continue;
                 }
 
-                if (0 != compareAttributes(attributeValue, value, compOp,compValType)) {
+                if (0 != RecordBasedFileManager::instance().compareAttributes(attributeValue, value, compOp,compValType)) {
                     //checking if the selected attribute is NULL or not satisfying the condition
                     free(record);
                     free(attributeValue);
