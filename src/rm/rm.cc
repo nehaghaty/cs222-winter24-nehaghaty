@@ -491,7 +491,7 @@ namespace PeterDB {
     }
 
     RC RelationManager::getAttributes(const std::string &tableName, std::vector<Attribute> &attrs) {
-
+        attrs.clear();
         std::string conditionAttribute = "table-name";
         PeterDB::CompOp compOp = PeterDB::EQ_OP;
         std::vector<std::string> attributeNames {"table-id"};
@@ -637,7 +637,7 @@ namespace PeterDB {
         rbfm.insertRecord(fileHandle, attrs, data, rid);
         rbfm.closeFile(fileHandle);
 
-        insertIndexEntries (data, rid, tableName, attrs);
+//        insertIndexEntries (data, rid, tableName, attrs);
         return 0;
     }
 

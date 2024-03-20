@@ -1008,7 +1008,7 @@ namespace PeterDB {
     void processSelectedAttributes(const std::vector<std::string>&attributeNames, std::unordered_map<std::string, int> &attributePositions,
                                    char *&result, std::vector<bool> isNull){
         size_t selectedFieldSize = attributeNames.size();
-        result = (char*) malloc((selectedFieldSize+7) /8);
+        result = (char*) malloc((selectedFieldSize+7) / 8);
         memset(result, 0, (selectedFieldSize + 7) / 8);
         std::vector<int> positions (selectedFieldSize);
         for(int i=0; i < selectedFieldSize; i++){
@@ -1024,10 +1024,6 @@ namespace PeterDB {
                 result[destByteIndex] |= (1 << (7 - destBitIndex));
             }
         }
-        // std::bitset<8> Bitset;
-        // memcpy(&Bitset, result, 1);
-        // free(result);
-        //std::cout << isNull[1] << " "<<Bitset << std::endl;
     }
 
 RC buildSelectedAttributesRecord (char *record, const std::vector<Attribute>&recordDescriptor,
