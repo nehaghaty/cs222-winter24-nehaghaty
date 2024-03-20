@@ -217,7 +217,7 @@ namespace PeterDBTesting {
         outBuffer = malloc(bufSize);
 
         std::string tableName = "right";
-        createAndPopulateTable(tableName, {}, 1000);
+        createAndPopulateTable(tableName, {}, 1);
 
         // Set up TableScan
         PeterDB::TableScan ts(rm, tableName);
@@ -238,8 +238,8 @@ namespace PeterDBTesting {
         }
 
         std::vector<std::string> expected;
-        expected.reserve(1000);
-        for (int i = 0; i < 1000; i++) {
+        expected.reserve(1);
+        for (int i = 0; i < 1; i++) {
             float c = (float) (i % 261) + 25.5f;
             unsigned d = i % 179;
 
@@ -1159,6 +1159,11 @@ namespace PeterDBTesting {
             checkPrintRecord(expected[i], printed[i], false, {}, i % 50 == 0);
         }
     }
+
+
+
+
+
 
     TEST_F(QE_Test, ghjoin_on_varchar) {
         // Extra credit

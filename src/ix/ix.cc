@@ -250,7 +250,6 @@ namespace PeterDB {
             iXFileHandle.iXAppendPage(hiddenPage);
         }
         leafNode.isLeaf = 1;
-//        leafNode.pageNum = 1;
         void* sePage[PAGE_SIZE];
         memset(sePage, 0, PAGE_SIZE);
         leafNode.Serialize(sePage, attribute);
@@ -298,6 +297,9 @@ namespace PeterDB {
     }
 
     int findKey (Node* node, const void *searchKey, const Attribute &attribute, CompOp compOp) {
+        if (searchKey == nullptr)
+            return -1;
+
         if(attribute.type == PeterDB::TypeInt){
             for (int i = 0; i < node->intKeys.size(); i++) {
                 if (compOp == GE_OP) {
@@ -1015,8 +1017,16 @@ namespace PeterDB {
             std::cout << "File already opened" <<std::endl;
             return -1;
         }
+
         if(PagedFileManager::instance().openFile(fileName, iXFileHandle.fileHandle)){
             return -1;
+        }
+        if(iXFileHandle.dummyHead == -1){
+            // create new b plus tree
+            LeafNode leafNode;
+            Attribute dummyAttr;
+            dummyAttr.type = TypeVarChar;
+            createBPlusTree(iXFileHandle, leafNode, dummyAttr);
         }
         iXFileHandle.isOpen = true;
         return 0;
@@ -1034,11 +1044,6 @@ namespace PeterDB {
     RC
     IndexManager::insertEntry(IXFileHandle &iXFileHandle, const Attribute &attribute, const void *key, const RID &rid) {
 
-        if(iXFileHandle.dummyHead == -1){
-            // create new b plus tree
-            LeafNode leafNode;
-            createBPlusTree(iXFileHandle, leafNode, attribute);
-        }
         PageNum newChildPageNum;
         void *smallestKey;
         RID smallestRid;
@@ -1218,7 +1223,6 @@ namespace PeterDB {
         return false;
     }
     RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
-
         int reqSatisfied = 0;
         while (!reqSatisfied) {
             if (currentIndex == -1)
@@ -1433,7 +1437,6 @@ namespace PeterDB {
             printInternalNode(dynamic_cast<InternalNode *>(node), attribute, out, iXFileHandle);
         }
     }
-
 
     RC IndexManager::printBTree(IXFileHandle &iXFileHandle, const Attribute &attribute, std::ostream &out) const {
         Node* rootNode;
