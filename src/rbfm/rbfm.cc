@@ -1002,9 +1002,10 @@ namespace PeterDB {
             float valReal = *(float*)value;
             return (false == compareRealAttributes(attrReal, valReal, compOp));
         }
+        return 0;
     }
-    void RecordBasedFileManager::
-    processSelectedAttributes(const std::vector<std::string>&attributeNames,
+
+    void RecordBasedFileManager::processSelectedAttributes(const std::vector<std::string>&attributeNames,
                               std::unordered_map<std::string, int> &attributePositions,
                               char *&result, std::vector<bool> isNull){
 
