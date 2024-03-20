@@ -1,5 +1,7 @@
 #include "src/include/qe.h"
 #include <sstream>
+#include <cstring>
+#include <cmath>
 
 #define CHAR_BIT    8
 
