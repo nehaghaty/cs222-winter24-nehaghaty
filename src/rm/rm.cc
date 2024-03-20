@@ -637,7 +637,7 @@ namespace PeterDB {
         rbfm.insertRecord(fileHandle, attrs, data, rid);
         rbfm.closeFile(fileHandle);
 
-        insertIndexEntries (data, rid, tableName, attrs);
+//        insertIndexEntries (data, rid, tableName, attrs);
         return 0;
     }
 

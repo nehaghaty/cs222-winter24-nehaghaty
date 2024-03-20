@@ -354,6 +354,8 @@ namespace PeterDB {
 
     BNLJoin::~BNLJoin() {
 
+    }
+
     RC BNLJoin::insertIntoMap(void *tupleData, std::vector<Attribute> &leftAttrs, Attribute &condAttr, int leftAttrPos){
         void* leftAttrKey;
         readDeserializedAttrValue((char*)tupleData, leftAttrPos, leftAttrs, leftAttrKey);
